@@ -1,11 +1,11 @@
 from flask import Flask, render_template, request, jsonify
 import pickle
-from soln_build_model import TextClassifier
+from build_model import TextClassifier
 
-app = Flask(__name__)
+app: Flask = Flask(__name__)
 
 
-with open('static/model.pkl') as f:
+with open('static/model.pkl', 'rb') as f:
     model = pickle.load(f)
 
 
