@@ -1,12 +1,19 @@
 """
-Module containing model fitting code for a web application that implements a
-text classification model.
+Module containing model fitting code for a web application that 
+implements a text classification model.
 
-When run as a module, this will load a csv dataset, train a classification
-model, and then pickle the resulting model object to disk.
+When run as a module, this will load a csv dataset, train a 
+classification model, and then pickle the resulting model object to disk.
+
+USE:
+
+python build_model.py --data path_to_input_data --out path_to_save_pickled_model
+
 """
-import pickle as pickle
+import argparse
+import pickle
 import pandas as pd
+import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 
@@ -15,6 +22,13 @@ class TextClassifier(object):
     """A text classifier model:
         - Vectorize the raw text into features.
         - Fit a naive bayes model to the resulting features.
+
+    The work done by this class could also be done with a sklean.pipeline
+    object.  Since the author cannot guarantee that Pipelines have been
+    introduced, he opted to write his own class implementing the model.
+
+    This class is an example of coding to an interface, it implements the
+    standard sklearn fit, predict, score interface.
     """
 
     def __init__(self):
@@ -33,28 +47,52 @@ class TextClassifier(object):
         -------
         self: The fit model object.
         """
-        # Code to fit the model.
-        X_transform = self._vectorizer.fit_transform(X)
-        self._classifier.fit(X_transform, y)
+        X = self._vectorizer.fit_transform(X)
+        self._classifier.fit(X, y)
         return self
 
     def predict_proba(self, X):
-        """Make probability predictions on new data."""
-        X_transform = self._vectorizer.transform(X)
-        return self._classifier.predict_proba(X_transform)
+        """Make probability predictions on new data.
+        
+        Parameters
+        ----------
+        X: A numpy array or list of text fragments, to be used as predictors.
+
+        Returns
+        -------
+        probs: A (n_obs, n_classes) numpy array of predicted class probabilities. 
+        """
+        X = self._vectorizer.transform(X)
+        return self._classifier.predict_proba(X)
 
     def predict(self, X):
-        """Make predictions on new data."""
-        X_transform = self._vectorizer.transform(X)
-        return self._classifier.predict(X_transform)
+        """Make class predictions on new data.
+
+        Parameters
+        ----------
+        X: A numpy array or list of text fragments, to be used as predictors.
+
+        Returns
+        -------
+        preds: A (n_obs,) numpy array containing the predicted class for each
+        observation (i.e. the class with the maximal predicted class probabilitiy.
+        """
+        X = self._vectorizer.transform(X)
+        return self._classifier.predict(X)
 
     def score(self, X, y):
-        """Return a classification accuracy score on new data."""
-        X_transform = self._vectorizer.transform(X)
-        return self._classifier.score(X_transform, y)
+        """Return a classification accuracy score on new data.
+
+        Parameters
+        ----------
+        X: A numpy array or list of text fragments.
+        y: A numpy array or python list of true class labels.
+        """
+        X = self._vectorizer.transform(X)
+        return self._classifier.score(X, y)
 
 
-def get_data(filename, natural_language_col='body', label_col='section_name'):
+def get_data(filename):
     """Load raw data from a file and return training data and responses.
 
     Parameters
@@ -67,27 +105,25 @@ def get_data(filename, natural_language_col='body', label_col='section_name'):
     y: A numpy array containing labels, used for model response.
     """
     df = pd.read_csv(filename)
-    y = df.pop(label_col)
-    return df[natural_language_col].values, y.values
+    X, y = df.body, df.section_name
+    return X, y
 
 
 if __name__ == '__main__':
-    #Data
-    X, y = get_data("data/articles.csv")
+    parser = argparse.ArgumentParser(
+        description='Fit a Text Classifier model and save the results.')
+    parser.add_argument('--data', help='A csv file with input data.')
+    parser.add_argument('--out', help='A file to save the pickled model object to.')
+    args = parser.parse_args()
 
+    X, y = get_data(args.data)
     tc = TextClassifier()
     tc.fit(X, y)
-
-    #Save model - Text classifier
-    with open('static/model.pkl', 'wb') as f:
+    
+    # Create directory if it doesn't exist
+    output_dir = os.path.dirname(args.out)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    with open(args.out, 'wb') as f:  # Use 'wb' for binary write mode
         pickle.dump(tc, f)
-
-    #load model
-    with open('static/model.pkl', 'rb') as f:
-        model = pickle.load(f)  
-
-    #model stats
-    print("Accuracy:", model.score(X, y))
-    print("Predictions:", model.predict(X))
-    
-    
