@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import pickle
-from build_model import TextClassifier # type: ignore
+from src.build_model import TextClassifier # type: ignore
 import os
 
 app: Flask = Flask(__name__)

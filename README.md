@@ -30,7 +30,7 @@ The model must be trained before running the web application.
 
 **Command:**
 ```bash
-python build_model.py --data <path_to_training_data> --out <path_to_save_model>
+python src/build_model.py --data <path_to_training_data> --out <path_to_save_model>
 ```
 
 **Parameters:**
@@ -43,7 +43,7 @@ python build_model.py --data <path_to_training_data> --out <path_to_save_model>
 
 **Example:**
 ```bash
-python build_model.py --data data/articles.csv --out static/model.pkl
+python src/build_model.py --data data/articles.csv --out static/model.pkl
 ```
 
 **What it does:**
