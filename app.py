@@ -3,7 +3,7 @@ import pickle
 from src.build_model import TextClassifier # type: ignore
 import os
 
-app: Flask = Flask(__name__)
+app = Flask(__name__)
 
 # Add route to serve Bootstrap files from shared directory
 @app.route('/bootstrap/<path:filename>')
@@ -14,7 +14,6 @@ def bootstrap_static(filename):
 
 with open('static/model.pkl', 'rb') as f:
     model = pickle.load(f)
-
 
 @app.route('/', methods=['GET'])
 def index():
@@ -88,4 +87,7 @@ def predict_traditional():
     return render_template('predict.html', article=data, predicted=pred, probability=max_prob)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    app.run(host='0.0.0.0'
+            , port=5000
+            , threaded=True) 
+    # These parameters are intended for AWS deployment. Adjust as needed.
