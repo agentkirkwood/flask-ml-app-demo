@@ -1,5 +1,6 @@
 static/
 __pycache__/
 *.pyc
+*.db
 .env
 .DS_Store
