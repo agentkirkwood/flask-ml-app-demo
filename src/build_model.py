@@ -140,6 +140,9 @@ def get_data(filename=None):
         sections = list(df.section_name)
     else:
         DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///data/articles.db')
+        # Fix Heroku postgres:// URL to postgresql://
+        if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+            DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
         engine = create_engine(DATABASE_URL)
         Session = sessionmaker(bind=engine)

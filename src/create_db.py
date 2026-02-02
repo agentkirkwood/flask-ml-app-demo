@@ -6,6 +6,9 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Get database URL from environment, default to data/articles.db
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///data/articles.db')
+# Fix Heroku postgres:// URL to postgresql://
+if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
 # Create engine
 engine = create_engine(DATABASE_URL)
