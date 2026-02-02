@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import pickle
-from src.build_model import TextClassifier # type: ignore
+from src.build_model import TextClassifier, get_data # type: ignore
 import os
 
 app = Flask(__name__)
@@ -17,8 +17,33 @@ model = None
 def get_model():
     global model
     if model is None:
-        with open('static/model.pkl', 'rb') as f:
-            model = pickle.load(f)
+        model_path = 'static/model.pkl'
+        
+        # Check if model exists, if not build it
+        if not os.path.exists(model_path):
+            print("Model not found, building it now...")
+            
+            # Create static directory if it doesn't exist
+            os.makedirs('static', exist_ok=True)
+            
+            # Load data and train model
+            X, y = get_data()
+            print(f"Data loaded successfully. Total articles: {len(X)}")
+            
+            model = TextClassifier()
+            model.fit(X, y)
+            print("Model training complete.")
+            
+            # Save the model
+            with open(model_path, 'wb') as f:
+                pickle.dump(model, f)
+            print(f"Model saved to {model_path}")
+        else:
+            # Load existing model
+            with open(model_path, 'rb') as f:
+                model = pickle.load(f)
+            print("Model loaded from disk")
+    
     return model
 
 @app.route('/', methods=['GET'])
