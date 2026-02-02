@@ -18,7 +18,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from create_db import Article, Base
+from src.create_db import Article, Base
 
 
 class TextClassifier(object):
