@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ article.headline.main if article.headline and article.headline.main else 'Article Details' }}{% endblock %}
+{% block title %}{{ article.headline.get('main') if article.headline else 'Article Details' }}{% endblock %}
 
 {% block extra_head %}
   <style>
@@ -23,7 +23,7 @@
     <a href="/articles" class="btn btn-outline-secondary mb-3">← Back to Articles List</a>
     
     <article>
-      <h1 class="mb-4">{{ article.headline.main if article.headline and article.headline.main else 'Untitled Article' }}</h1>
+      <h1 class="mb-4">{{ article.headline.get('main') if article.headline else 'Untitled Article' }}</h1>
       
       <div class="metadata">
         <div class="row">
