@@ -2,8 +2,20 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 import pickle
 from src.build_model import TextClassifier, get_data # type: ignore
 import os
+import math
+from sqlalchemy import create_engine, or_
+from sqlalchemy.orm import sessionmaker
+from src.create_db import Article, Author, Publisher, DATABASE_URL
 
 app = Flask(__name__)
+
+# Setup database connection
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+
+def get_db_session():
+    """Create a new database session"""
+    return Session()
 
 # Add route to serve Bootstrap files from shared directory
 @app.route('/bootstrap/<path:filename>')
@@ -55,6 +67,11 @@ def index():
 def submit():
     """Render an AJAX-enabled form to collect article text."""
     return render_template('submit.html')
+
+@app.route('/about', methods=['GET'])
+def about():
+    """Render the About page."""
+    return render_template('about.html')
 
 #The traditional form submission route
 @app.route('/submit_traditional', methods=['GET'])
@@ -118,6 +135,83 @@ def predict_traditional():
     probabilities = model.predict_proba([data])[0]
     max_prob = float(max(probabilities))
     return render_template('predict.html', article=data, predicted=pred, probability=max_prob)
+
+@app.route('/articles', methods=['GET'])
+def articles():
+    """Display a paginated list of articles with optional search."""
+    session = get_db_session()
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 25, type=int)
+        query_text = request.args.get('q', '', type=str).strip()
+
+        base_query = session.query(
+            Article.id,
+            Article.headline,
+            Article.pub_date,
+            Author.name.label('author_name'),
+            Publisher.name.label('publisher_name')
+        ).outerjoin(Author, Article.auth_id == Author.id)\
+         .outerjoin(Publisher, Article.pub_id == Publisher.id)
+
+        if query_text:
+            like_pattern = f"%{query_text}%"
+            base_query = base_query.filter(or_(
+                Article.headline.ilike(like_pattern),
+                Article.body.ilike(like_pattern),
+                Author.name.ilike(like_pattern),
+                Publisher.name.ilike(like_pattern),
+                Article.section_name.ilike(like_pattern),
+                Article.subsection.ilike(like_pattern)
+            ))
+
+        total = base_query.order_by(None).count()
+        total_pages = max(1, math.ceil(total / per_page)) if per_page > 0 else 1
+        page = max(1, min(page, total_pages))
+
+        articles = base_query.order_by(Article.pub_date.desc())\
+            .offset((page - 1) * per_page)\
+            .limit(per_page)\
+            .all()
+
+        return render_template(
+            'articles.html',
+            articles=articles,
+            page=page,
+            per_page=per_page,
+            total=total,
+            total_pages=total_pages,
+            query_text=query_text
+        )
+    finally:
+        session.close()
+
+@app.route('/articles/<article_id>', methods=['GET'])
+def article_detail(article_id):
+    """Display detailed information for a specific article."""
+    session = get_db_session()
+    try:
+        # Query the specific article with author and publisher info
+        article_data = session.query(
+            Article,
+            Author.name.label('author_name'),
+            Publisher.name.label('publisher_name')
+        ).outerjoin(Author, Article.auth_id == Author.id)\
+         .outerjoin(Publisher, Article.pub_id == Publisher.id)\
+         .filter(Article.id == article_id)\
+         .first()
+        
+        if not article_data:
+            return "Article not found", 404
+        
+        article, author_name, publisher_name = article_data
+        
+        return render_template('article_detail.html', 
+                             article=article,
+                             author_name=author_name,
+                             publisher_name=publisher_name)
+    finally:
+        session.close()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000)) #finds port set by Heroku or defaults to 5000

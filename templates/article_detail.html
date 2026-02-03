@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ article.headline or 'Article Details' }}{% endblock %}
+
+{% block extra_head %}
+  <style>
+    .article-body {
+      white-space: pre-wrap;
+      line-height: 1.8;
+      text-align: justify;
+    }
+    .metadata {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-radius: 5px;
+      margin-bottom: 30px;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="my-2">
+    <a href="/articles" class="btn btn-outline-secondary mb-3">← Back to Articles List</a>
+    
+    <article>
+      <h1 class="mb-4">{{ article.headline or 'Untitled Article' }}</h1>
+      
+      <div class="metadata">
+        <div class="row">
+          <div class="col-md-6">
+            <p class="mb-2">
+              <strong>Published:</strong> 
+              {% if article.pub_date %}
+                {{ article.pub_date.strftime('%B %d, %Y at %I:%M %p') }}
+              {% else %}
+                Unknown
+              {% endif %}
+            </p>
+            <p class="mb-2">
+              <strong>Author:</strong> {{ author_name or 'Unknown' }}
+            </p>
+            <p class="mb-2">
+              <strong>Publisher:</strong> {{ publisher_name or 'Unknown' }}
+            </p>
+          </div>
+          <div class="col-md-6">
+            {% if article.section_name %}
+            <p class="mb-2">
+              <strong>Section:</strong> {{ article.section_name }}
+            </p>
+            {% endif %}
+            {% if article.subsection %}
+            <p class="mb-2">
+              <strong>Subsection:</strong> {{ article.subsection }}
+            </p>
+            {% endif %}
+            {% if article.web_url %}
+            <p class="mb-2">
+              <strong>Original URL:</strong> 
+              <a href="{{ article.web_url }}" target="_blank" rel="noopener noreferrer">View Original</a>
+            </p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      
+      <div class="article-body">
+        {{ article.body or 'No article body available.' }}
+      </div>
+    </article>
+  </div>
+{% endblock %}
