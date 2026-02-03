@@ -1,11 +1,8 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DSI Text Classifier - AJAX</title>
-  <meta name="description" content="The Galvanize DSI Text Classifier">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+{% extends 'base.html' %}
+
+{% block title %}Classify Text (AJAX){% endblock %}
+
+{% block extra_head %}
   <style>
     .result-box {
       margin-top: 20px;
@@ -16,83 +13,76 @@
       display: none;
     }
   </style>
-</head>
-<body>
-  <div class="container">
-    <div class="row" style="margin-top: 30px;">
-      <div class="col-md-12">
-        <h1>Submit Your Text <small>(AJAX Version)</small></h1>
-        <p class="lead">Paste your article's text into the input box below, and click the <strong>Classify</strong> button to predict your article's classification.</p>
-      </div>
-    </div>
-    
-    <div class="row">
-      <div class="col-md-12">
-        <form id="classifyForm">
-          <div class="form-group">
-            <label for="article_body">Article Text:</label>
-            <textarea class="form-control" id="article_body" name="article_body" rows="12" placeholder="Paste your article text here..."></textarea>
-          </div>
-          <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
-            <span class="btn-text">Classify</span>
-            <span class="spinner">
-              <span class="glyphicon glyphicon-refresh glyphicon-spin"></span> Processing...
-            </span>
-          </button>
-          <a href="/" class="btn btn-default">Back</a>
-        </form>
-      </div>
-    </div>
-    
-    <!-- Result display area -->
-    <div class="row">
-      <div class="col-md-12">
-        <div id="resultBox" class="result-box">
-          <div class="panel panel-primary">
-            <div class="panel-heading">
-              <h3 class="panel-title">Predicted Classification</h3>
-            </div>
-            <div class="panel-body">
-              <h2 class="text-primary" id="prediction"></h2>
-              <p class="lead">Confidence: <strong id="probability"></strong></p>
-            </div>
-          </div>
-        </div>
-        
-        <div id="errorBox" class="alert alert-danger" style="display: none; margin-top: 20px;">
-          <strong>Error:</strong> <span id="errorMessage"></span>
-        </div>
-      </div>
+{% endblock %}
+
+{% block content %}
+  <div class="row">
+    <div class="col-md-12">
+      <h1>Submit Your Text <small>(AJAX Version)</small></h1>
+      <p class="lead">Paste your article's text into the input box below, and click the <strong>Classify</strong> button to predict your article's classification.</p>
     </div>
   </div>
   
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.min.js"></script>
+  <div class="row">
+    <div class="col-md-12">
+      <form id="classifyForm">
+        <div class="form-group">
+          <label for="article_body">Article Text:</label>
+          <textarea class="form-control" id="article_body" name="article_body" rows="12" placeholder="Paste your article text here..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+          <span class="btn-text">Classify</span>
+          <span class="spinner">
+            <span class="glyphicon glyphicon-refresh glyphicon-spin"></span> Processing...
+          </span>
+        </button>
+        <a href="/" class="btn btn-outline-secondary">Back</a>
+      </form>
+    </div>
+  </div>
   
+  <!-- Result display area -->
+  <div class="row">
+    <div class="col-md-12">
+      <div id="resultBox" class="result-box">
+        <div class="card border-primary">
+          <div class="card-header bg-primary text-white">
+            <h3 class="card-title mb-0">Predicted Classification</h3>
+          </div>
+          <div class="card-body">
+            <h2 class="text-primary" id="prediction"></h2>
+            <p class="lead">Confidence: <strong id="probability"></strong></p>
+          </div>
+        </div>
+      </div>
+      
+      <div id="errorBox" class="alert alert-danger" style="display: none; margin-top: 20px;">
+        <strong>Error:</strong> <span id="errorMessage"></span>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
   <script>
     $(document).ready(function() {
       $('#classifyForm').on('submit', function(e) {
-        e.preventDefault(); // Prevent normal form submission
+        e.preventDefault();
         
-        // Get the article text
         var articleText = $('#article_body').val().trim();
         
-        // Validate input
         if (!articleText) {
           showError('Please enter some article text before classifying.');
           return;
         }
         
-        // Hide previous results/errors
         $('#resultBox').hide();
         $('#errorBox').hide();
         
-        // Show loading state
         $('#submitBtn').prop('disabled', true);
         $('.btn-text').hide();
         $('.spinner').show();
         
-        // Make AJAX request
         $.ajax({
           url: '/predict',
           type: 'POST',
@@ -102,7 +92,6 @@
           }),
           success: function(response) {
             if (response.success) {
-              // Display the prediction and probability
               $('#prediction').text(response.prediction);
               $('#probability').text((response.probability * 100).toFixed(1) + '%');
               $('#resultBox').fadeIn();
@@ -110,7 +99,7 @@
               showError(response.error || 'An error occurred during classification.');
             }
           },
-          error: function(xhr, status, error) {
+          error: function(xhr) {
             var errorMsg = 'An error occurred. Please try again.';
             if (xhr.responseJSON && xhr.responseJSON.error) {
               errorMsg = xhr.responseJSON.error;
@@ -118,7 +107,6 @@
             showError(errorMsg);
           },
           complete: function() {
-            // Reset button state
             $('#submitBtn').prop('disabled', false);
             $('.btn-text').show();
             $('.spinner').hide();
@@ -132,5 +120,4 @@
       }
     });
   </script>
-</body>
-</html>
+{% endblock %}
