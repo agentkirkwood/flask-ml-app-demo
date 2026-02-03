@@ -18,8 +18,9 @@
 {% block content %}
   <div class="row">
     <div class="col-md-12">
-      <h1>Submit Your Text <small>(AJAX Version)</small></h1>
+      <h1>Submit Your Text</h1>
       <p class="lead">Paste your article's text into the input box below, and click the <strong>Classify</strong> button to predict your article's classification.</p>
+      <p class="text-muted small"><em>This page uses AJAX to send your text to the server and display results instantly without reloading the page.</em></p>
     </div>
   </div>
   
@@ -67,22 +68,27 @@
   <script>
     $(document).ready(function() {
       $('#classifyForm').on('submit', function(e) {
-        e.preventDefault();
+        e.preventDefault(); // Prevent normal form submission
         
+        // Get the article text
         var articleText = $('#article_body').val().trim();
         
+        // Validate input
         if (!articleText) {
           showError('Please enter some article text before classifying.');
           return;
         }
         
+        // Hide previous results/errors
         $('#resultBox').hide();
         $('#errorBox').hide();
         
+        // Show loading state
         $('#submitBtn').prop('disabled', true);
         $('.btn-text').hide();
         $('.spinner').show();
         
+        // Make AJAX request
         $.ajax({
           url: '/predict',
           type: 'POST',
@@ -92,6 +98,7 @@
           }),
           success: function(response) {
             if (response.success) {
+              // Display the prediction and probability
               $('#prediction').text(response.prediction);
               $('#probability').text((response.probability * 100).toFixed(1) + '%');
               $('#resultBox').fadeIn();
@@ -107,6 +114,7 @@
             showError(errorMsg);
           },
           complete: function() {
+            // Reset button state
             $('#submitBtn').prop('disabled', false);
             $('.btn-text').show();
             $('.spinner').hide();

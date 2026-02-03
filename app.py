@@ -73,13 +73,6 @@ def about():
     """Render the About page."""
     return render_template('about.html')
 
-#The traditional form submission route
-@app.route('/submit_traditional', methods=['GET'])
-def submit_traditional():
-    """Render a page containing a textarea input where the user can paste an
-    article to be classified (traditional form submission)."""
-    return render_template('submit_traditional.html')
-
 @app.route('/predict', methods=['POST'])
 def predict():
     """AJAX endpoint: Receive article text as JSON and return prediction as JSON.
@@ -123,18 +116,6 @@ def predict():
             'success': False,
             'error': str(e)
         }), 500
-
-#The traditional form submission route
-@app.route('/predict_traditional', methods=['POST'])
-def predict_traditional():
-    """Traditional form submission: Receive article from form and return HTML page.
-    """
-    data = str(request.form['article_body'])
-    model = get_model()
-    pred = str(model.predict([data])[0])
-    probabilities = model.predict_proba([data])[0]
-    max_prob = float(max(probabilities))
-    return render_template('predict.html', article=data, predicted=pred, probability=max_prob)
 
 @app.route('/articles', methods=['GET'])
 def articles():
