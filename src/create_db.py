@@ -1,7 +1,7 @@
 import os
 import ast
 import pandas as pd
-from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer, ForeignKey
+from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer, ForeignKey, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Get database URL from environment, default to data/articles.db
@@ -35,7 +35,7 @@ class Article(Base):
     __tablename__ = 'articles'
     
     id = Column(String, primary_key=True)
-    headline = Column(String)
+    headline = Column(JSON)
     pub_date = Column(DateTime)
     auth_id = Column(Integer, ForeignKey('authors.id'))
     pub_id = Column(Integer, ForeignKey('publishers.id'))
@@ -56,6 +56,20 @@ def normalize_byline(byline_value):
     if isinstance(byline_value, list):
         return {'person': byline_value}
     return {'person': []}
+
+
+def normalize_headline(headline_value):
+    """Ensure headline data is a dict with a 'main' field."""
+    if isinstance(headline_value, str):
+        try:
+            headline_value = ast.literal_eval(headline_value)
+        except Exception:
+            return {'main': headline_value, 'print_headline': ''}
+    if isinstance(headline_value, dict):
+        headline_value.setdefault('main', '')
+        headline_value.setdefault('print_headline', headline_value.get('main', ''))
+        return headline_value
+    return {'main': '', 'print_headline': ''}
 
 
 def extract_person(byline_value):
@@ -98,6 +112,9 @@ def load_articles_to_db():
     df['byline'] = df['byline'].apply(normalize_byline)
     df['person'] = df['byline'].apply(extract_person)
     df['author'] = df['person'].apply(first_person_name)
+
+    # Normalize headline to dict
+    df['headline'] = df['headline'].apply(normalize_headline)
 
     # Convert pub_date to datetime
     df['pub_date'] = pd.to_datetime(df['pub_date'], errors='coerce')

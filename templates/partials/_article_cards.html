@@ -5,7 +5,7 @@
       <div class="card-body">
         <h5 class="card-title">
           <a href="/articles/{{ article.id }}" class="text-decoration-none">
-            {{ article.headline or 'Untitled' }}
+            {{ article.headline.main if article.headline and article.headline.main else 'Untitled' }}
           </a>
         </h5>
         <div class="card-text">

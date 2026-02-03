@@ -139,7 +139,7 @@ def articles():
         if query_text:
             like_pattern = f"%{query_text}%"
             base_query = base_query.filter(or_(
-                Article.headline.ilike(like_pattern),
+                Article.headline['main'].as_string().ilike(like_pattern),
                 Article.body.ilike(like_pattern),
                 Author.name.ilike(like_pattern),
                 Publisher.name.ilike(like_pattern),
