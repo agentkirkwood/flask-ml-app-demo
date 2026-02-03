@@ -1,0 +1,32 @@
+{% if articles %}
+  {% for article in articles %}
+  <div class="col-md-12 mb-3 article-card-item">
+    <div class="card article-card">
+      <div class="card-body">
+        <h5 class="card-title">
+          <a href="/articles/{{ article.id }}" class="text-decoration-none">
+            {{ article.headline or 'Untitled' }}
+          </a>
+        </h5>
+        <div class="card-text">
+          <p class="mb-1">
+            <strong>Published:</strong> 
+            {% if article.pub_date %}
+              {{ article.pub_date.strftime('%B %d, %Y') }}
+            {% else %}
+              Unknown
+            {% endif %}
+          </p>
+          <p class="mb-1">
+            <strong>Author:</strong> {{ article.author_name or 'Unknown' }}
+          </p>
+          <p class="mb-1">
+            <strong>Publisher:</strong> {{ article.publisher_name or 'Unknown' }}
+          </p>
+        </div>
+        <a href="/articles/{{ article.id }}" class="btn btn-primary btn-sm mt-2">Read Full Article</a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% endif %}

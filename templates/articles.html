@@ -16,7 +16,7 @@
 {% block content %}
   <div class="my-2">
     <h1>Articles Database</h1>
-    <p class="lead">Browse all articles in our collection</p>
+    <p class="lead">Browse all articles in the training database</p>
   </div>
 
     <div class="row mb-4">
@@ -37,77 +37,131 @@
       </div>
       <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
         <div class="text-muted">
-          Showing {{ articles|length }} of {{ total }} results
+          Showing <span id="resultsCount">{{ articles|length }}</span> of {{ total }} results
         </div>
       </div>
     </div>
     
-    <div class="row">
-      {% if articles %}
-        {% for article in articles %}
-        <div class="col-md-12 mb-3">
-          <div class="card article-card">
-            <div class="card-body">
-              <h5 class="card-title">
-                <a href="/articles/{{ article.id }}" class="text-decoration-none">
-                  {{ article.headline or 'Untitled' }}
-                </a>
-              </h5>
-              <div class="card-text">
-                <p class="mb-1">
-                  <strong>Published:</strong> 
-                  {% if article.pub_date %}
-                    {{ article.pub_date.strftime('%B %d, %Y') }}
-                  {% else %}
-                    Unknown
-                  {% endif %}
-                </p>
-                <p class="mb-1">
-                  <strong>Author:</strong> {{ article.author_name or 'Unknown' }}
-                </p>
-                <p class="mb-1">
-                  <strong>Publisher:</strong> {{ article.publisher_name or 'Unknown' }}
-                </p>
-              </div>
-              <a href="/articles/{{ article.id }}" class="btn btn-primary btn-sm mt-2">Read Full Article</a>
-            </div>
-          </div>
-        </div>
-        {% endfor %}
-      {% else %}
+    <div class="row" id="articlesContainer"
+         data-page="{{ page }}"
+         data-total-pages="{{ total_pages }}"
+         data-per-page="{{ per_page }}"
+         data-query="{{ query_text|e }}">
+      {% include 'partials/_article_cards.html' %}
+    </div>
+
+    {% if not articles %}
+      <div class="row">
         <div class="col-md-12">
           <div class="alert alert-info">
             No articles found in the database.
           </div>
         </div>
-      {% endif %}
-    </div>
-
-    {% if total_pages > 1 %}
-    <nav aria-label="Articles pagination" class="mt-4">
-      <ul class="pagination justify-content-center">
-        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
-          <a class="page-link" href="/articles?page={{ page - 1 }}&per_page={{ per_page }}{% if query_text %}&q={{ query_text|urlencode }}{% endif %}" aria-label="Previous">
-            <span aria-hidden="true">&laquo;</span>
-          </a>
-        </li>
-
-        {% for p in range(1, total_pages + 1) %}
-          {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
-            <li class="page-item {% if p == page %}active{% endif %}">
-              <a class="page-link" href="/articles?page={{ p }}&per_page={{ per_page }}{% if query_text %}&q={{ query_text|urlencode }}{% endif %}">{{ p }}</a>
-            </li>
-          {% elif p == page - 3 or p == page + 3 %}
-            <li class="page-item disabled"><span class="page-link">…</span></li>
-          {% endif %}
-        {% endfor %}
-
-        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
-          <a class="page-link" href="/articles?page={{ page + 1 }}&per_page={{ per_page }}{% if query_text %}&q={{ query_text|urlencode }}{% endif %}" aria-label="Next">
-            <span aria-hidden="true">&raquo;</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
+      </div>
     {% endif %}
+
+    {% if total_pages > page %}
+      <div class="d-flex justify-content-center my-4">
+        <button id="loadMoreBtn" class="btn btn-outline-primary">Load more</button>
+      </div>
+      <div id="loadMoreSentinel" class="mb-4"></div>
+    {% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    (function () {
+      var container = document.getElementById('articlesContainer');
+      if (!container) return;
+
+      var loadMoreBtn = document.getElementById('loadMoreBtn');
+      var sentinel = document.getElementById('loadMoreSentinel');
+      var resultsCount = document.getElementById('resultsCount');
+
+      function updateCount() {
+        if (!resultsCount) return;
+        var count = container.querySelectorAll('.article-card-item').length;
+        resultsCount.textContent = String(count);
+      }
+
+      function getParams() {
+        return {
+          page: parseInt(container.dataset.page || '1', 10),
+          totalPages: parseInt(container.dataset.totalPages || '1', 10),
+          perPage: container.dataset.perPage || '25',
+          query: container.dataset.query || ''
+        };
+      }
+
+      function setPage(page) {
+        container.dataset.page = String(page);
+      }
+
+      function hideLoader() {
+        if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+        if (sentinel) sentinel.style.display = 'none';
+      }
+
+      function buildUrl(nextPage) {
+        var params = new URLSearchParams();
+        params.set('page', String(nextPage));
+        params.set('per_page', getParams().perPage);
+        if (getParams().query) params.set('q', getParams().query);
+        params.set('partial', '1');
+        return '/articles?' + params.toString();
+      }
+
+      var isLoading = false;
+
+      function loadMore() {
+        if (isLoading) return;
+        var params = getParams();
+        if (params.page >= params.totalPages) return hideLoader();
+
+        isLoading = true;
+        if (loadMoreBtn) loadMoreBtn.disabled = true;
+
+        var nextPage = params.page + 1;
+
+        fetch(buildUrl(nextPage))
+          .then(function (response) { return response.text(); })
+          .then(function (html) {
+            if (!html.trim()) {
+              hideLoader();
+              return;
+            }
+            container.insertAdjacentHTML('beforeend', html);
+            setPage(nextPage);
+            updateCount();
+
+            if (nextPage >= params.totalPages) {
+              hideLoader();
+            }
+          })
+          .catch(function () {
+            if (loadMoreBtn) loadMoreBtn.disabled = false;
+          })
+          .finally(function () {
+            isLoading = false;
+            if (loadMoreBtn) loadMoreBtn.disabled = false;
+          });
+      }
+
+      if (loadMoreBtn) {
+        loadMoreBtn.addEventListener('click', function () {
+          loadMore();
+        });
+      }
+
+      if ('IntersectionObserver' in window && sentinel) {
+        var observer = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) loadMore();
+          });
+        }, { rootMargin: '200px' });
+
+        observer.observe(sentinel);
+      }
+    })();
+  </script>
 {% endblock %}

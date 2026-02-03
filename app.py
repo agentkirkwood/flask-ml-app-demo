@@ -125,6 +125,7 @@ def articles():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 25, type=int)
         query_text = request.args.get('q', '', type=str).strip()
+        partial = request.args.get('partial', 0, type=int)
 
         base_query = session.query(
             Article.id,
@@ -154,6 +155,9 @@ def articles():
             .offset((page - 1) * per_page)\
             .limit(per_page)\
             .all()
+
+        if partial:
+            return render_template('partials/_article_cards.html', articles=articles)
 
         return render_template(
             'articles.html',
@@ -198,4 +202,6 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000)) #finds port set by Heroku or defaults to 5000
     app.run(host='0.0.0.0'
             , port=port
+            , debug=False
+            , use_reloader=False
             , threaded=True) 
