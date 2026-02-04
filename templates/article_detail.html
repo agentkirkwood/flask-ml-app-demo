@@ -49,6 +49,11 @@
               <strong>Subject:</strong> {{ article.subject }}
             </p>
             {% endif %}
+            {% if article.pred_subject %}
+            <p class="mb-2">
+              <strong>Predicted Subject:</strong> <em>{{ article.pred_subject }}</em>
+            </p>
+            {% endif %}
             {% if article.section %}
             <p class="mb-2">
               <strong>Section:</strong> {{ article.section }}
@@ -57,12 +62,6 @@
             {% if article.subsection %}
             <p class="mb-2">
               <strong>Subsection:</strong> {{ article.subsection }}
-            </p>
-            {% endif %}
-            {% if article.web_url %}
-            <p class="mb-2">
-              <strong>Original URL:</strong> 
-              <a href="{{ article.web_url }}" target="_blank" rel="noopener noreferrer">View Original</a>
             </p>
             {% endif %}
           </div>

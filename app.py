@@ -133,6 +133,7 @@ def articles():
             Article.headline,
             Article.pub_date,
             Article.subject,
+            Article.pred_subject,
             Author.name.label('author_name'),
             Publisher.name.label('publisher_name')
         ).outerjoin(Author, Article.auth_id == Author.id)\
@@ -245,6 +246,44 @@ if __name__ == '__main__':
         with open(model_path, 'wb') as f:
             pickle.dump(model, f)
         print(f"Model saved to {model_path}")
+        
+        # Predict subjects for all articles and update database
+        print("\nGenerating predictions for all articles (only for those without predictions)...")
+        db_session = get_db_session()
+        try:
+            # Get only articles without pred_subject to avoid re-predicting on each model rebuild
+            articles_to_predict = db_session.query(Article).filter(
+                (Article.pred_subject.is_(None)) | (Article.pred_subject == '')
+            ).all()
+            total_articles = len(articles_to_predict)
+            
+            if total_articles == 0:
+                print("All articles already have predictions. Skipping prediction step.")
+            else:
+                print(f"Found {total_articles} articles without predictions")
+                
+                # Predict in batches for efficiency
+                batch_size = 100
+                for i in range(0, total_articles, batch_size):
+                    batch = articles_to_predict[i:i + batch_size]
+                    bodies = [article.body for article in batch]
+                    predictions = model.predict(bodies)
+                    
+                    for article, pred in zip(batch, predictions):
+                        article.pred_subject = pred
+                    
+                    db_session.commit()
+                    progress = min(i + batch_size, total_articles)
+                    print(f"  Predicted {progress}/{total_articles} articles", end='\r', flush=True)
+                
+                print(f"  Predicted {total_articles}/{total_articles} articles")
+                print(f"Successfully predicted subjects for {total_articles} articles")
+        except Exception as e:
+            db_session.rollback()
+            print(f"Error predicting subjects: {e}")
+            raise
+        finally:
+            db_session.close()
     
     # Start the Flask app
     port = int(os.environ.get('PORT', 5000)) #finds port set by Heroku or defaults to 5000

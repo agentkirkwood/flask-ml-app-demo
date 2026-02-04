@@ -14,6 +14,11 @@
             <strong>Subject:</strong> {{ article.subject }}
           </p>
           {% endif %}
+          {% if article.pred_subject %}
+          <p class="mb-1">
+            <strong>Predicted Subject:</strong> <em>{{ article.pred_subject }}</em>
+          </p>
+          {% endif %}
           <p class="mb-1">
             <strong>Published:</strong> 
             {% if article.pub_date %}

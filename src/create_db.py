@@ -42,6 +42,7 @@ class Article(Base):
     section = Column(String)
     subsection = Column(String)
     subject = Column(String)  # Transformed subject from section and subsection
+    pred_subject = Column(String)  # Predicted subject from trained model
     body = Column(Text)
     web_url = Column(String)
 
