@@ -3,6 +3,7 @@ import pickle
 from src.build_model import TextClassifier, get_data # type: ignore
 import os
 import math
+import argparse
 from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
 from src.create_db import Article, Author, Publisher, DATABASE_URL
@@ -131,6 +132,7 @@ def articles():
             Article.id,
             Article.headline,
             Article.pub_date,
+            Article.subject,
             Author.name.label('author_name'),
             Publisher.name.label('publisher_name')
         ).outerjoin(Author, Article.auth_id == Author.id)\
@@ -143,7 +145,7 @@ def articles():
                 Article.body.ilike(like_pattern),
                 Author.name.ilike(like_pattern),
                 Publisher.name.ilike(like_pattern),
-                Article.section_name.ilike(like_pattern),
+                Article.section.ilike(like_pattern),
                 Article.subsection.ilike(like_pattern)
             ))
 
@@ -199,9 +201,56 @@ def article_detail(article_id):
         session.close()
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Run Flask app with optional rebuild commands')
+    parser.add_argument('--db_rebuild', action='store_true', 
+                       help='Rebuild the database from CSV before starting the app (also rebuilds model since it is downstream of the DB)')
+    parser.add_argument('--model_rebuild', action='store_true',
+                       help='Rebuild the machine learning model before starting the app')
+    args = parser.parse_args()
+    
+    # NOTE: The model is downstream of the database (depends on DB data for training)
+    # If the database is rebuilt, the model must also be rebuilt to reflect changes
+    # in the data or schema (e.g., new subject field)
+    
+    # Rebuild database if requested
+    if args.db_rebuild:
+        print("Rebuilding database...")
+        from src.create_db import load_articles_to_db
+        load_articles_to_db()
+        print("Database rebuild complete!")
+        # Automatically rebuild model since it depends on DB data
+        args.model_rebuild = True
+        print("Model rebuild triggered (database is upstream of model)")
+    
+    # Rebuild model if requested (or triggered by db_rebuild)
+    if args.model_rebuild:
+        print("Rebuilding model...")
+        model_path = 'static/model.pkl'
+        
+        # Remove old model if it exists
+        if os.path.exists(model_path):
+            os.remove(model_path)
+            print(f"Removed existing model at {model_path}")
+        
+        # Build new model using current database data
+        os.makedirs('static', exist_ok=True)
+        X, y = get_data()
+        print(f"Data loaded successfully. Total articles: {len(X)}")
+        print(f"Unique subjects: {len(set(y))}")
+        
+        model = TextClassifier()
+        model.fit(X, y)
+        print("Model training complete.")
+        
+        with open(model_path, 'wb') as f:
+            pickle.dump(model, f)
+        print(f"Model saved to {model_path}")
+    
+    # Start the Flask app
     port = int(os.environ.get('PORT', 5000)) #finds port set by Heroku or defaults to 5000
     app.run(host='0.0.0.0'
             , port=port
             , debug=False
             , use_reloader=False
-            , threaded=True) 
+            , threaded=True)
+ 
