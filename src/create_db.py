@@ -148,7 +148,7 @@ def load_articles_to_db():
     df = pd.read_csv(csv_path)
     
     # Select only the required columns
-    required_columns = ['pub_date', 'source', 'section_name', 'headline', 'subsection_name', 'body', 'web_url', 'byline']
+    required_columns = ['_id', 'pub_date', 'source', 'section_name', 'headline', 'subsection_name', 'body', 'web_url', 'byline']
     df = df[required_columns]
     
     # Rename section_name to section for consistency
@@ -208,7 +208,7 @@ def load_articles_to_db():
             subject = create_subject(row['section'], row['subsection_name'])
             
             article = Article(
-                id=str(idx),
+                id=str(row['_id']),
                 pub_date=row['pub_date'],
                 pub_id=pub_id,
                 section=row['section'],
