@@ -5,7 +5,7 @@ import os
 import math
 import argparse
 from urllib.parse import urlencode
-from sqlalchemy import create_engine, or_
+from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker
 from src.create_db import Article, Author, Publisher, DATABASE_URL
 
