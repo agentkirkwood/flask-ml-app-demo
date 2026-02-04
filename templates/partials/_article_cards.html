@@ -9,6 +9,11 @@
           </a>
         </h5>
         <div class="card-text">
+          {% if article.subject %}
+          <p class="mb-1">
+            <strong>Subject:</strong> {{ article.subject }}
+          </p>
+          {% endif %}
           <p class="mb-1">
             <strong>Published:</strong> 
             {% if article.pub_date %}

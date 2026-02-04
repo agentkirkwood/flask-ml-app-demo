@@ -39,8 +39,9 @@ class Article(Base):
     pub_date = Column(DateTime)
     auth_id = Column(Integer, ForeignKey('authors.id'))
     pub_id = Column(Integer, ForeignKey('publishers.id'))
-    section_name = Column(String)
+    section = Column(String)
     subsection = Column(String)
+    subject = Column(String)  # Transformed subject from section and subsection
     body = Column(Text)
     web_url = Column(String)
 
@@ -94,6 +95,50 @@ def first_person_name(person_list):
         return f"{firstname} {lastname}".strip()
     return ''
 
+def create_subject(section, subsection):
+    """Transform section and subsection into a subject field.
+    
+    Returns empty string if section should be excluded from training,
+    or if section is U.S./Sports and subsection is blank.
+    """
+    if not section:
+        return ''
+    
+    # Filter out sections that should be excluded
+    if section in ['Universal', 'NYT Now', 'Magazine', 'World']:
+        return ''
+    
+    # For U.S. or Sports sections, use subsection
+    if section in ['U.S.', 'Sports']:
+        if not subsection:
+            return ''
+        
+        # Normalize sports subsections
+        sports_mapping = {
+            'Pro Basketball': 'Basketball',
+            'College Basketball': 'Basketball',
+            'Pro Football': 'Football',
+            'College Football': 'Football',
+        }
+        
+        return sports_mapping.get(subsection, subsection)
+    
+    # Apply section name mappings
+    mapping = {
+        'Your Money': 'Business, Economics & Finance',
+        'Job Market': 'Business, Economics & Finance',
+        'Business Day': 'Business, Economics & Finance',
+        'Style': 'Fashion & Style',
+        'Great Homes & Destinations': 'Travel & Real Estate',
+        'Real Estate': 'Travel & Real Estate',
+        'Travel': 'Travel & Real Estate',
+        'Automobiles': 'Technology',
+        'Public Editor': 'Opinion',
+        'The Upshot': 'Politics',
+    }
+    
+    return mapping.get(section, section)
+
 def load_articles_to_db():
     """Load articles from CSV into the database"""
     
@@ -104,6 +149,9 @@ def load_articles_to_db():
     # Select only the required columns
     required_columns = ['pub_date', 'source', 'section_name', 'headline', 'subsection_name', 'body', 'web_url', 'byline']
     df = df[required_columns]
+    
+    # Rename section_name to section for consistency
+    df = df.rename(columns={'section_name': 'section'})
 
     # Clean up data - replace NaN with None
     df = df.where(pd.notna(df), None)
@@ -155,13 +203,17 @@ def load_articles_to_db():
             pub_id = publishers_map.get(row['source'])
             auth_id = authors_map.get(row['author'])
             
+            # Create subject from section and subsection
+            subject = create_subject(row['section'], row['subsection_name'])
+            
             article = Article(
                 id=str(idx),
                 pub_date=row['pub_date'],
                 pub_id=pub_id,
-                section_name=row['section_name'],
+                section=row['section'],
                 headline=row['headline'],
                 subsection=row['subsection_name'],
+                subject=subject,
                 body=row['body'],
                 web_url=row['web_url'],
                 auth_id=auth_id

@@ -44,9 +44,14 @@
             </p>
           </div>
           <div class="col-md-6">
-            {% if article.section_name %}
+            {% if article.subject %}
             <p class="mb-2">
-              <strong>Section:</strong> {{ article.section_name }}
+              <strong>Subject:</strong> {{ article.subject }}
+            </p>
+            {% endif %}
+            {% if article.section %}
+            <p class="mb-2">
+              <strong>Section:</strong> {{ article.section }}
             </p>
             {% endif %}
             {% if article.subsection %}

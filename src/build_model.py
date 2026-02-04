@@ -95,30 +95,6 @@ class TextClassifier(object):
         return self._classifier.score(X, y)
 
 
-def transform_section_name(section):
-    """Transform and filter section names for the training dataset.
-    
-    Returns None if section should be excluded from training.
-    """
-    if section in ['Universal', 'NYT Now', 'Magazine']:
-        return None
-    
-    mapping = {
-        'Your Money': 'Business, Economics & Finance',
-        'Job Market': 'Business, Economics & Finance',
-        'Business Day': 'Business, Economics & Finance',
-        'Style': 'Fashion & Style',
-        'Great Homes & Destinations': 'Travel & Real Estate',
-        'Real Estate': 'Travel & Real Estate',
-        'Travel': 'Travel & Real Estate',
-        'Automobiles': 'Technology',
-        'Public Editor': 'Opinion',
-        'The Upshot': 'Politics',
-    }
-    
-    return mapping.get(section, section)
-
-
 def get_data(filename=None):
     """Load training data.
 
@@ -126,7 +102,7 @@ def get_data(filename=None):
     Otherwise, load from the database indicated by `DATABASE_URL` or
     default `sqlite:///data/articles.db`.
     
-    Applies section name transformations and filtering as preprocessing.
+    Filters out articles with blank subjects.
 
     Returns
     -------
@@ -135,39 +111,29 @@ def get_data(filename=None):
     """
     if filename:
         # Deprecated path: load directly from CSV
-        df = pd.read_csv(filename)
-        bodies = list(df.body)
-        sections = list(df.section_name)
-    else:
-        DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///data/articles.db')
-        # Fix Heroku postgres:// URL to postgresql+psycopg:// for psycopg3
-        if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
-            DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql+psycopg://', 1)
-        elif DATABASE_URL and DATABASE_URL.startswith('postgresql://') and 'sqlite' not in DATABASE_URL:
-            DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
-
-        engine = create_engine(DATABASE_URL)
-        Session = sessionmaker(bind=engine)
-        session = Session()
-
-        try:
-            articles = session.query(Article).all()
-            bodies = [article.body for article in articles]
-            sections = [article.section_name for article in articles]
-        finally:
-            session.close()
-
-    # Filter and transform section names
-    filtered_bodies = []
-    filtered_sections = []
+        # Note: This path is deprecated and doesn't support subject field
+        raise ValueError("Loading from CSV is no longer supported. Please use database.")
     
-    for body, section in zip(bodies, sections):
-        transformed = transform_section_name(section)
-        if transformed is not None:
-            filtered_bodies.append(body)
-            filtered_sections.append(transformed)
+    DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///data/articles.db')
+    # Fix Heroku postgres:// URL to postgresql+psycopg:// for psycopg3
+    if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql+psycopg://', 1)
+    elif DATABASE_URL and DATABASE_URL.startswith('postgresql://') and 'sqlite' not in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
+
+    engine = create_engine(DATABASE_URL)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    try:
+        # Load articles with non-blank subjects only
+        articles = session.query(Article).filter(Article.subject != '').filter(Article.subject.isnot(None)).all()
+        bodies = [article.body for article in articles]
+        subjects = [article.subject for article in articles]
+    finally:
+        session.close()
     
-    return filtered_bodies, filtered_sections
+    return bodies, subjects
 
 
 if __name__ == '__main__':
