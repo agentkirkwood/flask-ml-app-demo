@@ -126,6 +126,8 @@ def articles():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 25, type=int)
         query_text = request.args.get('q', '', type=str).strip()
+        subject_filter = request.args.get('subject', '', type=str).strip()
+        publisher_filter = request.args.get('publisher', '', type=str).strip()
         partial = request.args.get('partial', 0, type=int)
 
         base_query = session.query(
@@ -138,6 +140,12 @@ def articles():
             Publisher.name.label('publisher_name')
         ).outerjoin(Author, Article.auth_id == Author.id)\
          .outerjoin(Publisher, Article.pub_id == Publisher.id)
+
+        if subject_filter:
+            base_query = base_query.filter(Article.subject == subject_filter)
+
+        if publisher_filter:
+            base_query = base_query.filter(Publisher.name == publisher_filter)
 
         if query_text:
             like_pattern = f"%{query_text}%"
@@ -162,6 +170,20 @@ def articles():
         if partial:
             return render_template('partials/_article_cards.html', articles=articles)
 
+        subjects = [row[0] for row in session.query(Article.subject)
+                    .filter(Article.subject.isnot(None))
+                    .filter(Article.subject != '')
+                    .distinct()
+                    .order_by(Article.subject.asc())
+                    .all()]
+
+        publishers = [row[0] for row in session.query(Publisher.name)
+                      .filter(Publisher.name.isnot(None))
+                      .filter(Publisher.name != '')
+                      .distinct()
+                      .order_by(Publisher.name.asc())
+                      .all()]
+
         return render_template(
             'articles.html',
             articles=articles,
@@ -169,7 +191,11 @@ def articles():
             per_page=per_page,
             total=total,
             total_pages=total_pages,
-            query_text=query_text
+            query_text=query_text,
+            subject_filter=subject_filter,
+            publisher_filter=publisher_filter,
+            subjects=subjects,
+            publishers=publishers
         )
     finally:
         session.close()

@@ -21,8 +21,20 @@
 
     <div class="row mb-4">
       <div class="col-lg-8">
-        <form method="get" action="/articles" class="d-flex gap-2">
-          <input type="text" name="q" class="form-control" placeholder="Search headlines, body, author, publisher..." value="{{ query_text }}">
+        <form method="get" action="/articles" class="d-flex gap-2 flex-wrap">
+          <input type="text" name="q" class="form-control" placeholder="Search headlines, body, author, publisher..." value="{{ query_text }}" style="min-width: 220px;">
+          <select name="subject" class="form-select" style="max-width: 200px;">
+            <option value="">All Subjects</option>
+            {% for subject in subjects %}
+              <option value="{{ subject }}" {% if subject == subject_filter %}selected{% endif %}>{{ subject }}</option>
+            {% endfor %}
+          </select>
+          <select name="publisher" class="form-select" style="max-width: 200px;">
+            <option value="">All Publishers</option>
+            {% for publisher in publishers %}
+              <option value="{{ publisher }}" {% if publisher == publisher_filter %}selected{% endif %}>{{ publisher }}</option>
+            {% endfor %}
+          </select>
           <select name="per_page" class="form-select" style="max-width: 140px;">
             <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
             <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
@@ -30,7 +42,7 @@
             <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
           </select>
           <button type="submit" class="btn btn-primary">Search</button>
-          {% if query_text %}
+          {% if query_text or subject_filter or publisher_filter %}
             <a href="/articles" class="btn btn-outline-secondary">Clear</a>
           {% endif %}
         </form>
@@ -46,7 +58,9 @@
          data-page="{{ page }}"
          data-total-pages="{{ total_pages }}"
          data-per-page="{{ per_page }}"
-         data-query="{{ query_text|e }}">
+         data-query="{{ query_text|e }}"
+         data-subject="{{ subject_filter|e }}"
+         data-publisher="{{ publisher_filter|e }}">
       {% include 'partials/_article_cards.html' %}
     </div>
 
@@ -89,7 +103,9 @@
           page: parseInt(container.dataset.page || '1', 10),
           totalPages: parseInt(container.dataset.totalPages || '1', 10),
           perPage: container.dataset.perPage || '25',
-          query: container.dataset.query || ''
+          query: container.dataset.query || '',
+          subject: container.dataset.subject || '',
+          publisher: container.dataset.publisher || ''
         };
       }
 
@@ -107,6 +123,8 @@
         params.set('page', String(nextPage));
         params.set('per_page', getParams().perPage);
         if (getParams().query) params.set('q', getParams().query);
+        if (getParams().subject) params.set('subject', getParams().subject);
+        if (getParams().publisher) params.set('publisher', getParams().publisher);
         params.set('partial', '1');
         return '/articles?' + params.toString();
       }
