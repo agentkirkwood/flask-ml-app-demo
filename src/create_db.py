@@ -109,33 +109,38 @@ def create_subject(section, subsection):
     if section in ['Universal', 'NYT Now', 'Magazine', 'World']:
         return ''
     
-    # For U.S. or Sports sections, use subsection
-    if section in ['U.S.', 'Sports']:
-        if not subsection:
-            return ''
-        
-        # Normalize sports subsections
-        sports_mapping = {
-            'Pro Basketball': 'Basketball',
-            'College Basketball': 'Basketball',
-            'Pro Football': 'Football',
-            'College Football': 'Football',
-        }
-        
-        return sports_mapping.get(subsection, subsection)
+    # For Sports sections, consolidate all into just "Sports"
+    if section == 'Sports':
+        return 'Sports'
     
-    # Apply section name mappings
+    # For U.S. section, use Politics
+    if section == 'U.S.':
+        return ''
+    
+    # Apply section name mappings for consolidation
     mapping = {
-        'Your Money': 'Business, Economics & Finance',
-        'Job Market': 'Business, Economics & Finance',
-        'Business Day': 'Business, Economics & Finance',
-        'Style': 'Fashion & Style',
-        'Great Homes & Destinations': 'Travel & Real Estate',
-        'Real Estate': 'Travel & Real Estate',
-        'Travel': 'Travel & Real Estate',
-        'Automobiles': 'Technology',
+        'Your Money': 'Business',
+        'Job Market': 'Business',
+        'Business Day': 'Business',
+        'Arts': 'Arts & Entertainment',
+        'Books': 'Arts & Entertainment',
+        'Movies': 'Arts & Entertainment',
+        'Theater': 'Arts & Entertainment',
+        'Style': 'Lifestyle',
+        'Fashion & Style': 'Lifestyle',
+        'Food': 'Lifestyle',
+        'Health': 'Lifestyle',
+        'Great Homes & Destinations': 'Lifestyle',
+        'Real Estate': 'Lifestyle',
+        'Travel': 'Lifestyle',
+        'Automobiles': 'Science & Technology',
+        'Technology': 'Science & Technology',
+        'Science': 'Science & Technology',
+        'Education': 'Science & Technology',
         'Public Editor': 'Opinion',
         'The Upshot': 'Politics',
+        'N.Y. / Region': 'Regional News',
+        'Corrections': 'Opinion',
     }
     
     return mapping.get(section, section)
