@@ -20,7 +20,7 @@
 
 {% block content %}
   <div class="my-2">
-    <a href="/articles" class="btn btn-outline-secondary mb-3">← Back to Articles List</a>
+    <a href="/articles{% if query_params %}?{{ query_params }}{% endif %}" class="btn btn-outline-secondary mb-3">← Back to Articles List</a>
     
     <article>
       <h1 class="mb-4">{{ article.headline.get('main') if article.headline else 'Untitled Article' }}</h1>

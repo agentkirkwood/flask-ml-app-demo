@@ -17,24 +17,53 @@
   <div class="my-2">
     <h1>Articles Database</h1>
     <p class="lead">Browse all articles in the training database</p>
+    <p class="text-muted small"><em>This page uses AJAX to filter and update results instantly without reloading the page.</em></p>
   </div>
 
     <div class="row mb-4">
       <div class="col-lg-8">
-        <form method="get" action="/articles" class="d-flex gap-2 flex-wrap">
+        <form id="articleFiltersForm" method="get" action="/articles" class="d-flex gap-2 flex-wrap">
           <input type="text" name="q" class="form-control" placeholder="Search headlines, body, author, publisher..." value="{{ query_text }}" style="min-width: 220px;">
-          <select name="subject" class="form-select" style="max-width: 200px;">
-            <option value="">All Subjects</option>
-            {% for subject in subjects %}
-              <option value="{{ subject }}" {% if subject == subject_filter %}selected{% endif %}>{{ subject }}</option>
-            {% endfor %}
-          </select>
-          <select name="publisher" class="form-select" style="max-width: 200px;">
-            <option value="">All Publishers</option>
-            {% for publisher in publishers %}
-              <option value="{{ publisher }}" {% if publisher == publisher_filter %}selected{% endif %}>{{ publisher }}</option>
-            {% endfor %}
-          </select>
+          <div class="border rounded p-2" style="min-width: 220px;">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <a class="fw-semibold small text-decoration-none" data-bs-toggle="collapse" href="#subjectCollapse" role="button" aria-expanded="true" aria-controls="subjectCollapse">
+                Subjects <i class="bi bi-chevron-down"></i>
+              </a>
+              <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="selectAllSubjects" style="font-size: 0.75rem;">Select All</button>
+            </div>
+            <div class="collapse show" id="subjectCollapse">
+              <div style="max-height: 160px; overflow: auto;">
+                <div id="subjectOptions">
+                  {% for subject in subjects %}
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="subject" value="{{ subject }}" id="subject-{{ loop.index }}" {% if subject in subject_filter %}checked{% endif %}>
+                      <label class="form-check-label" for="subject-{{ loop.index }}">{{ subject }}</label>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="border rounded p-2" style="min-width: 220px;">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <a class="fw-semibold small text-decoration-none" data-bs-toggle="collapse" href="#publisherCollapse" role="button" aria-expanded="true" aria-controls="publisherCollapse">
+                Publishers <i class="bi bi-chevron-down"></i>
+              </a>
+              <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="selectAllPublishers" style="font-size: 0.75rem;">Select All</button>
+            </div>
+            <div class="collapse show" id="publisherCollapse">
+              <div style="max-height: 160px; overflow: auto;">
+                <div id="publisherOptions">
+                  {% for publisher in publishers %}
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="publisher" value="{{ publisher }}" id="publisher-{{ loop.index }}" {% if publisher in publisher_filter %}checked{% endif %}>
+                      <label class="form-check-label" for="publisher-{{ loop.index }}">{{ publisher }}</label>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
           <select name="per_page" class="form-select" style="max-width: 140px;">
             <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
             <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
@@ -42,14 +71,12 @@
             <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
           </select>
           <button type="submit" class="btn btn-primary">Search</button>
-          {% if query_text or subject_filter or publisher_filter %}
-            <a href="/articles" class="btn btn-outline-secondary">Clear</a>
-          {% endif %}
+          <button id="clearFiltersBtn" type="button" class="btn btn-outline-secondary" {% if not (query_text or subject_filter or publisher_filter) %}style="display: none;"{% endif %}>Clear</button>
         </form>
       </div>
       <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
         <div class="text-muted">
-          Showing <span id="resultsCount">{{ articles|length }}</span> of {{ total }} results
+          Showing <span id="resultsCount">{{ articles|length }}</span> of <span id="totalCount">{{ total }}</span> results
         </div>
       </div>
     </div>
@@ -59,8 +86,8 @@
          data-total-pages="{{ total_pages }}"
          data-per-page="{{ per_page }}"
          data-query="{{ query_text|e }}"
-         data-subject="{{ subject_filter|e }}"
-         data-publisher="{{ publisher_filter|e }}">
+         data-subjects='{{ subject_filter|tojson }}'
+         data-publishers='{{ publisher_filter|tojson }}'>
       {% include 'partials/_article_cards.html' %}
     </div>
 
@@ -88,14 +115,38 @@
       var container = document.getElementById('articlesContainer');
       if (!container) return;
 
+      var form = document.getElementById('articleFiltersForm');
+      var clearBtn = document.getElementById('clearFiltersBtn');
+      var subjectOptions = document.getElementById('subjectOptions');
+      var publisherOptions = document.getElementById('publisherOptions');
+      var selectAllSubjectsBtn = document.getElementById('selectAllSubjects');
+      var selectAllPublishersBtn = document.getElementById('selectAllPublishers');
+      var perPageSelect = form ? form.querySelector('[name="per_page"]') : null;
       var loadMoreBtn = document.getElementById('loadMoreBtn');
       var sentinel = document.getElementById('loadMoreSentinel');
       var resultsCount = document.getElementById('resultsCount');
+      var totalCount = document.getElementById('totalCount');
 
       function updateCount() {
         if (!resultsCount) return;
         var count = container.querySelectorAll('.article-card-item').length;
         resultsCount.textContent = String(count);
+      }
+
+      function parseDatasetArray(value) {
+        try {
+          var parsed = JSON.parse(value || '[]');
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function updateTotal(total) {
+        if (!totalCount) return;
+        if (typeof total === 'number') {
+          totalCount.textContent = String(total);
+        }
       }
 
       function getParams() {
@@ -104,12 +155,17 @@
           totalPages: parseInt(container.dataset.totalPages || '1', 10),
           perPage: container.dataset.perPage || '25',
           query: container.dataset.query || '',
-          subject: container.dataset.subject || '',
-          publisher: container.dataset.publisher || ''
+          subject: parseDatasetArray(container.dataset.subjects),
+          publisher: parseDatasetArray(container.dataset.publishers)
         };
       }
 
       function setPage(page) {
+        container.dataset.page = String(page);
+      }
+
+      function setTotals(totalPages, page) {
+        container.dataset.totalPages = String(totalPages);
         container.dataset.page = String(page);
       }
 
@@ -118,15 +174,145 @@
         if (sentinel) sentinel.style.display = 'none';
       }
 
+      function showLoader() {
+        if (loadMoreBtn) loadMoreBtn.style.display = '';
+        if (sentinel) sentinel.style.display = '';
+      }
+
+      function updateLoaderVisibility() {
+        var params = getParams();
+        if (params.page >= params.totalPages) {
+          hideLoader();
+        } else {
+          showLoader();
+        }
+      }
+
       function buildUrl(nextPage) {
         var params = new URLSearchParams();
         params.set('page', String(nextPage));
         params.set('per_page', getParams().perPage);
         if (getParams().query) params.set('q', getParams().query);
-        if (getParams().subject) params.set('subject', getParams().subject);
-        if (getParams().publisher) params.set('publisher', getParams().publisher);
+        getParams().subject.forEach(function (value) {
+          params.append('subject', value);
+        });
+        getParams().publisher.forEach(function (value) {
+          params.append('publisher', value);
+        });
         params.set('partial', '1');
         return '/articles?' + params.toString();
+      }
+
+      function buildFilterParams(page) {
+        var params = new URLSearchParams();
+        var q = form ? form.querySelector('[name="q"]').value.trim() : '';
+        var perPage = perPageSelect ? perPageSelect.value : getParams().perPage;
+
+        var subjectValues = [];
+        var publisherValues = [];
+
+        if (form) {
+          subjectValues = Array.prototype.map.call(
+            form.querySelectorAll('input[name="subject"]:checked'),
+            function (node) { return node.value; }
+          );
+          publisherValues = Array.prototype.map.call(
+            form.querySelectorAll('input[name="publisher"]:checked'),
+            function (node) { return node.value; }
+          );
+        }
+
+        if (q) params.set('q', q);
+        subjectValues.forEach(function (value) { params.append('subject', value); });
+        publisherValues.forEach(function (value) { params.append('publisher', value); });
+        params.set('per_page', perPage);
+        params.set('page', String(page));
+        return params;
+      }
+
+      function updateSelectAllButton(name) {
+        if (!form) return;
+        var checkboxes = form.querySelectorAll('input[name="' + name + '"]');
+        var allChecked = Array.prototype.every.call(checkboxes, function (cb) { return cb.checked; });
+        var btn = name === 'subject' ? selectAllSubjectsBtn : selectAllPublishersBtn;
+        if (btn) {
+          btn.textContent = allChecked ? 'Deselect All' : 'Select All';
+        }
+      }
+
+      function setCheckboxOptions(containerEl, options, selectedValues, name, idPrefix) {
+        if (!containerEl) return;
+        containerEl.innerHTML = '';
+
+        options.forEach(function (value, index) {
+          var wrapper = document.createElement('div');
+          wrapper.className = 'form-check';
+
+          var input = document.createElement('input');
+          input.className = 'form-check-input';
+          input.type = 'checkbox';
+          input.name = name;
+          input.value = value;
+          input.id = idPrefix + '-' + String(index + 1);
+          if (selectedValues.indexOf(value) !== -1) {
+            input.checked = true;
+          }
+
+          var label = document.createElement('label');
+          label.className = 'form-check-label';
+          label.setAttribute('for', input.id);
+          label.textContent = value;
+
+          wrapper.appendChild(input);
+          wrapper.appendChild(label);
+          containerEl.appendChild(wrapper);
+        });
+        
+        updateSelectAllButton(name);
+      }
+
+      function applyFilters(pushState) {
+        var params = buildFilterParams(1);
+        var url = '/articles?' + params.toString();
+        var selectedSubjects = params.getAll('subject');
+        var selectedPublishers = params.getAll('publisher');
+
+        if (clearBtn) {
+          if (params.get('q') || selectedSubjects.length || selectedPublishers.length) {
+            clearBtn.style.display = '';
+          } else {
+            clearBtn.style.display = 'none';
+          }
+        }
+
+        container.dataset.query = params.get('q') || '';
+        container.dataset.subjects = JSON.stringify(selectedSubjects);
+        container.dataset.publishers = JSON.stringify(selectedPublishers);
+        container.dataset.perPage = params.get('per_page') || '25';
+        setPage(1);
+
+        if (loadMoreBtn) loadMoreBtn.disabled = true;
+
+        fetch(url + '&partial=1&include_filters=1')
+          .then(function (response) { return response.json(); })
+          .then(function (payload) {
+            container.innerHTML = payload.html || '';
+            updateCount();
+            updateTotal(payload.total);
+            setTotals(payload.total_pages || 1, payload.page || 1);
+            updateLoaderVisibility();
+
+            setCheckboxOptions(subjectOptions, payload.subjects || [], selectedSubjects, 'subject', 'subject');
+            setCheckboxOptions(publisherOptions, payload.publishers || [], selectedPublishers, 'publisher', 'publisher');
+
+            if (pushState !== false) {
+              window.history.pushState({}, '', url);
+            }
+          })
+          .catch(function () {})
+          .finally(function () {
+            if (loadMoreBtn) loadMoreBtn.disabled = false;
+          });
       }
 
       var isLoading = false;
@@ -168,6 +354,81 @@
       if (loadMoreBtn) {
         loadMoreBtn.addEventListener('click', function () {
           loadMore();
+        });
+      }
+
+      if (form) {
+        form.addEventListener('submit', function (event) {
+          event.preventDefault();
+          applyFilters(true);
+        });
+
+        if (subjectOptions) {
+          subjectOptions.addEventListener('change', function (event) {
+            if (event.target && event.target.name === 'subject') {
+              applyFilters(true);
+            }
+          });
+        }
+
+        if (publisherOptions) {
+          publisherOptions.addEventListener('change', function (event) {
+            if (event.target && event.target.name === 'publisher') {
+              applyFilters(true);
+            }
+          });
+        }
+
+        if (perPageSelect) {
+          perPageSelect.addEventListener('change', function () {
+            applyFilters(true);
+          });
+        }
+      }
+
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+          if (!form) return;
+          form.querySelector('[name="q"]').value = '';
+          Array.prototype.forEach.call(
+            form.querySelectorAll('input[name="subject"]:checked'),
+            function (node) { node.checked = false; }
+          );
+          Array.prototype.forEach.call(
+            form.querySelectorAll('input[name="publisher"]:checked'),
+            function (node) { node.checked = false; }
+          );
+          applyFilters(true);
+        });
+      }
+
+      if (selectAllSubjectsBtn) {
+        selectAllSubjectsBtn.addEventListener('click', function () {
+          if (!form) return;
+          var checkboxes = form.querySelectorAll('input[name="subject"]');
+          var allChecked = Array.prototype.every.call(checkboxes, function (cb) { return cb.checked; });
+          
+          Array.prototype.forEach.call(checkboxes, function (cb) {
+            cb.checked = !allChecked;
+          });
+          
+          selectAllSubjectsBtn.textContent = allChecked ? 'Select All' : 'Deselect All';
+          applyFilters(true);
+        });
+      }
+
+      if (selectAllPublishersBtn) {
+        selectAllPublishersBtn.addEventListener('click', function () {
+          if (!form) return;
+          var checkboxes = form.querySelectorAll('input[name="publisher"]');
+          var allChecked = Array.prototype.every.call(checkboxes, function (cb) { return cb.checked; });
+          
+          Array.prototype.forEach.call(checkboxes, function (cb) {
+            cb.checked = !allChecked;
+          });
+          
+          selectAllPublishersBtn.textContent = allChecked ? 'Select All' : 'Deselect All';
+          applyFilters(true);
         });
       }
 

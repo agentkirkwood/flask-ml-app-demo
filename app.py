@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, make_response
 import pickle
 from src.build_model import TextClassifier, get_data # type: ignore
 import os
 import math
 import argparse
+from urllib.parse import urlencode
 from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
 from src.create_db import Article, Author, Publisher, DATABASE_URL
@@ -126,9 +127,10 @@ def articles():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 25, type=int)
         query_text = request.args.get('q', '', type=str).strip()
-        subject_filter = request.args.get('subject', '', type=str).strip()
-        publisher_filter = request.args.get('publisher', '', type=str).strip()
+        subject_filter = [s.strip() for s in request.args.getlist('subject') if s.strip()]
+        publisher_filter = [p.strip() for p in request.args.getlist('publisher') if p.strip()]
         partial = request.args.get('partial', 0, type=int)
+        include_filters = request.args.get('include_filters', 0, type=int)
 
         base_query = session.query(
             Article.id,
@@ -142,10 +144,10 @@ def articles():
          .outerjoin(Publisher, Article.pub_id == Publisher.id)
 
         if subject_filter:
-            base_query = base_query.filter(Article.subject == subject_filter)
+            base_query = base_query.filter(Article.subject.in_(subject_filter))
 
         if publisher_filter:
-            base_query = base_query.filter(Publisher.name == publisher_filter)
+            base_query = base_query.filter(Publisher.name.in_(publisher_filter))
 
         if query_text:
             like_pattern = f"%{query_text}%"
@@ -167,17 +169,86 @@ def articles():
             .limit(per_page)\
             .all()
 
-        if partial:
-            return render_template('partials/_article_cards.html', articles=articles)
+        query_params = request.args.to_dict(flat=False)
+        query_params.pop('partial', None)
+        query_string = urlencode(query_params, doseq=True)
 
-        subjects = [row[0] for row in session.query(Article.subject)
+        def apply_search_filters(query):
+            if query_text:
+                like_pattern = f"%{query_text}%"
+                query = query.filter(or_(
+                    Article.headline['main'].as_string().ilike(like_pattern),
+                    Article.body.ilike(like_pattern),
+                    Author.name.ilike(like_pattern),
+                    Publisher.name.ilike(like_pattern),
+                    Article.section.ilike(like_pattern),
+                    Article.subsection.ilike(like_pattern)
+                ))
+            return query
+
+        if partial and include_filters:
+            subject_query = session.query(Article.subject)
+            subject_query = subject_query.outerjoin(Publisher, Article.pub_id == Publisher.id)\
+                .outerjoin(Author, Article.auth_id == Author.id)
+            subject_query = apply_search_filters(subject_query)
+            if publisher_filter:
+                subject_query = subject_query.filter(Publisher.name.in_(publisher_filter))
+            subjects = [row[0] for row in subject_query
+                        .filter(Article.subject.isnot(None))
+                        .filter(Article.subject != '')
+                        .distinct()
+                        .order_by(Article.subject.asc())
+                        .all()]
+
+            publisher_query = session.query(Publisher.name)
+            publisher_query = publisher_query.join(Article, Article.pub_id == Publisher.id)\
+                .outerjoin(Author, Article.auth_id == Author.id)
+            publisher_query = apply_search_filters(publisher_query)
+            if subject_filter:
+                publisher_query = publisher_query.filter(Article.subject.in_(subject_filter))
+            publishers = [row[0] for row in publisher_query
+                          .filter(Publisher.name.isnot(None))
+                          .filter(Publisher.name != '')
+                          .distinct()
+                          .order_by(Publisher.name.asc())
+                          .all()]
+
+            return jsonify({
+                'html': render_template('partials/_article_cards.html', articles=articles, query_params=query_string),
+                'total': total,
+                'total_pages': total_pages,
+                'page': page,
+                'subjects': subjects,
+                'publishers': publishers
+            })
+
+        if partial:
+            response = make_response(render_template('partials/_article_cards.html', articles=articles, query_params=query_string))
+            response.headers['X-Total'] = str(total)
+            response.headers['X-Total-Pages'] = str(total_pages)
+            response.headers['X-Page'] = str(page)
+            return response
+
+        subject_query = session.query(Article.subject)
+        subject_query = subject_query.outerjoin(Publisher, Article.pub_id == Publisher.id)\
+            .outerjoin(Author, Article.auth_id == Author.id)
+        subject_query = apply_search_filters(subject_query)
+        if publisher_filter:
+            subject_query = subject_query.filter(Publisher.name.in_(publisher_filter))
+        subjects = [row[0] for row in subject_query
                     .filter(Article.subject.isnot(None))
                     .filter(Article.subject != '')
                     .distinct()
                     .order_by(Article.subject.asc())
                     .all()]
 
-        publishers = [row[0] for row in session.query(Publisher.name)
+        publisher_query = session.query(Publisher.name)
+        publisher_query = publisher_query.join(Article, Article.pub_id == Publisher.id)\
+            .outerjoin(Author, Article.auth_id == Author.id)
+        publisher_query = apply_search_filters(publisher_query)
+        if subject_filter:
+            publisher_query = publisher_query.filter(Article.subject.in_(subject_filter))
+        publishers = [row[0] for row in publisher_query
                       .filter(Publisher.name.isnot(None))
                       .filter(Publisher.name != '')
                       .distinct()
@@ -195,7 +266,8 @@ def articles():
             subject_filter=subject_filter,
             publisher_filter=publisher_filter,
             subjects=subjects,
-            publishers=publishers
+            publishers=publishers,
+            query_params=query_string
         )
     finally:
         session.close()
@@ -220,10 +292,15 @@ def article_detail(article_id):
         
         article, author_name, publisher_name = article_data
         
+        query_params = request.args.to_dict(flat=False)
+        query_params.pop('partial', None)
+        query_string = urlencode(query_params, doseq=True)
+
         return render_template('article_detail.html', 
-                             article=article,
-                             author_name=author_name,
-                             publisher_name=publisher_name)
+                     article=article,
+                     author_name=author_name,
+                     publisher_name=publisher_name,
+                     query_params=query_string)
     finally:
         session.close()
 

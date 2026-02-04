@@ -4,7 +4,7 @@
     <div class="card article-card">
       <div class="card-body">
         <h5 class="card-title">
-          <a href="/articles/{{ article.id }}" class="text-decoration-none">
+          <a href="/articles/{{ article.id }}{% if query_params %}?{{ query_params }}{% endif %}" class="text-decoration-none">
             {{ article.headline.get('main') if article.headline else 'Untitled' }}
           </a>
         </h5>
@@ -34,7 +34,7 @@
             <strong>Publisher:</strong> {{ article.publisher_name or 'Unknown' }}
           </p>
         </div>
-        <a href="/articles/{{ article.id }}" class="btn btn-primary btn-sm mt-2">Read Full Article</a>
+        <a href="/articles/{{ article.id }}{% if query_params %}?{{ query_params }}{% endif %}" class="btn btn-primary btn-sm mt-2">Read Full Article</a>
       </div>
     </div>
   </div>
