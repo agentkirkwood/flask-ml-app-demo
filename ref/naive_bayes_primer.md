@@ -76,7 +76,7 @@ Your app uses `MultinomialNB` from scikit-learn, which counts word occurrences a
 
 ## Real-World Performance
 
-For **news categorization** (like your app with article subjects), Naive Bayes typically achieves:
+For **news categorization** (like this app with article subjects), Naive Bayes typically achieves:
 - 75-85% accuracy with reasonable datasets
 - Up to 90%+ when combined with good preprocessing
 
@@ -84,9 +84,9 @@ More sophisticated approaches (SVM, Neural Networks) might achieve 85-95%, but o
 
 ## Best Practices for Naive Bayes
 
-1. **Use TF-IDF vectorization** (like your code does) instead of raw counts
+1. **Use TF-IDF vectorization** instead of raw counts
 2. **Apply preprocessing**: lowercase, remove punctuation, stop words
-3. **Handle class imbalance**: Use `class_weight='balanced'` if classes are unequal
+3. **Handle class imbalance**: oversample minority classes or undersample majority
 4. **Tune smoothing**: The `alpha` parameter controls how much credit you give to unseen words
 5. **Consider Laplace smoothing**: Prevents zero-frequency problems
 
