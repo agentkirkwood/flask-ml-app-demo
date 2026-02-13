@@ -29,6 +29,18 @@ def bootstrap_static(filename):
 model = None
 
 def get_model():
+    """Lazy-load or train the text classifier model.
+    
+    This function implements lazy initialization: on the first call, it either
+    loads an existing model from disk or trains a new one from database.
+    Subsequent calls return the cached model without retraining.
+    
+    After loading/training, it also auto-predicts subjects for any articles
+    that don't yet have predictions (pred_subject is None or empty).
+    
+    Returns:
+        TextClassifier: The trained and cached model object
+    """
     global model
     if model is None:
         model_path = 'static/model.pkl'
@@ -53,10 +65,47 @@ def get_model():
                 pickle.dump(model, f)
             print(f"Model saved to {model_path}")
         else:
-            # Load existing model
+            # Load existing model from disk
             with open(model_path, 'rb') as f:
                 model = pickle.load(f)
             print("Model loaded from disk")
+        
+        # Auto-predict subjects for articles that don't have predictions yet
+        # This ensures pred_subject is populated after model load/train
+        print("\nChecking for articles without predictions...")
+        db_session = get_db_session()
+        try:
+            articles_to_predict = db_session.query(Article).filter(
+                (Article.pred_subject.is_(None)) | (Article.pred_subject == '')
+            ).all()
+            
+            if articles_to_predict:
+                total_articles = len(articles_to_predict)
+                print(f"Found {total_articles} articles without predictions. Generating...")
+                
+                # Predict in batches for efficiency
+                batch_size = 100
+                for i in range(0, total_articles, batch_size):
+                    batch = articles_to_predict[i:i + batch_size]
+                    bodies = [article.body for article in batch]
+                    predictions = model.predict(bodies)
+                    
+                    for article, pred in zip(batch, predictions):
+                        article.pred_subject = pred
+                    
+                    db_session.commit()
+                    progress = min(i + batch_size, total_articles)
+                    print(f"  Predicted {progress}/{total_articles} articles", end='\r', flush=True)
+                
+                print(f"\n  Successfully predicted {total_articles} articles")
+            else:
+                print("All articles already have predictions.")
+        except Exception as e:
+            db_session.rollback()
+            print(f"Error predicting subjects: {e}")
+            raise
+        finally:
+            db_session.close()
     
     return model
 
