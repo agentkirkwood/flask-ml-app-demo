@@ -65,7 +65,7 @@ def get_model():
                 pickle.dump(model, f)
             print(f"Model saved to {model_path}")
         else:
-            # Load existing model from disk
+            # Load existing model
             with open(model_path, 'rb') as f:
                 model = pickle.load(f)
             print("Model loaded from disk")
@@ -213,7 +213,7 @@ def articles():
         total_pages = max(1, math.ceil(total / per_page)) if per_page > 0 else 1
         page = max(1, min(page, total_pages))
 
-        articles = base_query.order_by(Article.pub_date.desc())\
+        articles = base_query.order_by(func.random())\
             .offset((page - 1) * per_page)\
             .limit(per_page)\
             .all()
