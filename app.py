@@ -1,13 +1,16 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory, make_response
+from flask import Flask, render_template, request, jsonify, send_from_directory, make_response, redirect, url_for
+from flask.wrappers import Response
 import pickle
-from src.build_model import TextClassifier, get_data # type: ignore
+from src.build_model import TextClassifier, get_data
 import os
 import math
 import argparse
+from typing import Any
 from urllib.parse import urlencode
 from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker
 from src.create_db import Article, Author, Publisher, DATABASE_URL
+import random
 
 app = Flask(__name__)
 
@@ -21,14 +24,14 @@ def get_db_session():
 
 # Add route to serve Bootstrap files from shared directory
 @app.route('/bootstrap/<path:filename>')
-def bootstrap_static(filename):
+def bootstrap_static(filename: str) -> Response:
     bootstrap_dir = os.path.join(os.path.dirname(__file__), '..', 'bootstrap')
     return send_from_directory(bootstrap_dir, filename)
 
 
-model = None
+model: TextClassifier | None = None
 
-def get_model():
+def get_model() -> TextClassifier:
     """Lazy-load or train the text classifier model.
     
     This function implements lazy initialization: on the first call, it either
@@ -125,7 +128,7 @@ def about():
     return render_template('about.html')
 
 @app.route('/predict', methods=['POST'])
-def predict():
+def predict() -> Response:
     """AJAX endpoint: Receive article text as JSON and return prediction as JSON.
     
     Expected JSON input:
@@ -169,7 +172,7 @@ def predict():
         }), 500
 
 @app.route('/articles', methods=['GET'])
-def articles():
+def articles() -> Response:
     """Display a paginated list of articles with optional search."""
     session = get_db_session()
     try:
@@ -178,8 +181,29 @@ def articles():
         query_text = request.args.get('q', '', type=str).strip()
         subject_filter = [s.strip() for s in request.args.getlist('subject') if s.strip()]
         publisher_filter = [p.strip() for p in request.args.getlist('publisher') if p.strip()]
+        sort_key = request.args.get('sort', 'random', type=str).strip()
+        random_seed = request.args.get('seed', type=int)
         partial = request.args.get('partial', 0, type=int)
         include_filters = request.args.get('include_filters', 0, type=int)
+
+        # Generate a new seed if not provided and sort is random
+        if sort_key == 'random' and random_seed is None:
+            random_seed = random.randint(1, 2147483647)
+            # If this is NOT a partial request, redirect to add seed to URL
+            if not partial:
+                redirect_params = request.args.copy()
+                redirect_params['seed'] = random_seed
+                redirect_params['sort'] = 'random'  # Add this line
+                return redirect(url_for('articles', **redirect_params))
+
+        allowed_sorts = {
+            'random': 'random',
+            'date_desc': 'date_desc',
+            'date_asc': 'date_asc',
+            'author': 'author',
+            'publisher': 'publisher'
+        }
+        sort_key = allowed_sorts.get(sort_key, 'random')
 
         base_query = session.query(
             Article.id,
@@ -213,10 +237,30 @@ def articles():
         total_pages = max(1, math.ceil(total / per_page)) if per_page > 0 else 1
         page = max(1, min(page, total_pages))
 
-        articles = base_query.order_by(func.random())\
-            .offset((page - 1) * per_page)\
-            .limit(per_page)\
-            .all()
+        # Apply sorting
+        if sort_key == 'date_desc':
+            base_query = base_query.order_by(Article.pub_date.desc())
+        elif sort_key == 'date_asc':
+            base_query = base_query.order_by(Article.pub_date.asc())
+        elif sort_key == 'author':
+            base_query = base_query.order_by(Author.name)
+        elif sort_key == 'publisher':
+            base_query = base_query.order_by(Publisher.name)
+        else:  # random
+            results = base_query.all()
+            rng = random.Random(random_seed)
+            rng.shuffle(results)
+            total = len(results)
+            start = (page - 1) * per_page
+            end = start + per_page
+            articles = results[start:end]
+
+        # For non-random sorts, use normal pagination
+        if sort_key != 'random':
+            total = base_query.count()
+            articles = base_query.offset((page - 1) * per_page).limit(per_page).all()
+
+        total_pages = math.ceil(total / per_page) if total > 0 else 1
 
         query_params = request.args.to_dict(flat=False)
         query_params.pop('partial', None)
@@ -235,49 +279,7 @@ def articles():
                 ))
             return query
 
-        if partial and include_filters:
-            subject_query = session.query(Article.subject)
-            subject_query = subject_query.outerjoin(Publisher, Article.pub_id == Publisher.id)\
-                .outerjoin(Author, Article.auth_id == Author.id)
-            subject_query = apply_search_filters(subject_query)
-            if publisher_filter:
-                subject_query = subject_query.filter(Publisher.name.in_(publisher_filter))
-            subjects = [row[0] for row in subject_query
-                        .filter(Article.subject.isnot(None))
-                        .filter(Article.subject != '')
-                        .distinct()
-                        .order_by(Article.subject.asc())
-                        .all()]
-
-            publisher_query = session.query(Publisher.name)
-            publisher_query = publisher_query.join(Article, Article.pub_id == Publisher.id)\
-                .outerjoin(Author, Article.auth_id == Author.id)
-            publisher_query = apply_search_filters(publisher_query)
-            if subject_filter:
-                publisher_query = publisher_query.filter(Article.subject.in_(subject_filter))
-            publishers = [row[0] for row in publisher_query
-                          .filter(Publisher.name.isnot(None))
-                          .filter(Publisher.name != '')
-                          .distinct()
-                          .order_by(Publisher.name.asc())
-                          .all()]
-
-            return jsonify({
-                'html': render_template('partials/_article_cards.html', articles=articles, query_params=query_string),
-                'total': total,
-                'total_pages': total_pages,
-                'page': page,
-                'subjects': subjects,
-                'publishers': publishers
-            })
-
-        if partial:
-            response = make_response(render_template('partials/_article_cards.html', articles=articles, query_params=query_string))
-            response.headers['X-Total'] = str(total)
-            response.headers['X-Total-Pages'] = str(total_pages)
-            response.headers['X-Page'] = str(page)
-            return response
-
+        # Always fetch subjects and publishers for the full page render
         subject_query = session.query(Article.subject)
         subject_query = subject_query.outerjoin(Publisher, Article.pub_id == Publisher.id)\
             .outerjoin(Author, Article.auth_id == Author.id)
@@ -304,26 +306,53 @@ def articles():
                       .order_by(Publisher.name.asc())
                       .all()]
 
+        if partial and include_filters:
+            return jsonify({
+                'html': render_template('partials/_article_cards.html', articles=articles, query_params=query_string),
+                'total': total,
+                'total_pages': total_pages,
+                'page': page,
+                'subjects': subjects,
+                'publishers': publishers,
+                'seed': random_seed
+            })
+
+        if partial:
+            return jsonify({
+                'html': render_template('partials/_article_cards.html', articles=articles, query_params=query_string),
+                'total': total,
+                'total_pages': total_pages,
+                'page': page,
+                'subjects': None,
+                'publishers': None,
+                'seed': random_seed
+            })
+
         return render_template(
             'articles.html',
             articles=articles,
-            page=page,
-            per_page=per_page,
+            query_params=query_string,
             total=total,
             total_pages=total_pages,
+            page=page,
+            per_page=per_page,
             query_text=query_text,
             subject_filter=subject_filter,
             publisher_filter=publisher_filter,
+            sort_key=sort_key,
+            seed=random_seed,
             subjects=subjects,
-            publishers=publishers,
-            query_params=query_string
+            publishers=publishers
         )
     finally:
         session.close()
 
 @app.route('/articles/<article_id>', methods=['GET'])
-def article_detail(article_id):
+def article_detail(article_id) -> Response:
     """Display detailed information for a specific article."""
+    seed = request.args.get('seed', type=int)
+    sort_key = request.args.get('sort', 'random', type=str).strip()
+    
     session = get_db_session()
     try:
         # Query the specific article with author and publisher info
@@ -345,11 +374,15 @@ def article_detail(article_id):
         query_params.pop('partial', None)
         query_string = urlencode(query_params, doseq=True)
 
-        return render_template('article_detail.html', 
-                     article=article,
-                     author_name=author_name,
-                     publisher_name=publisher_name,
-                     query_params=query_string)
+        context: dict[str, Any] = {
+            'article': article,
+            'seed': seed,
+            'sort': sort_key,
+            'author_name': author_name,
+            'publisher_name': publisher_name,
+            'query_params': query_string
+        }
+        return render_template('article_detail.html', **context)
     finally:
         session.close()
 
@@ -444,4 +477,3 @@ if __name__ == '__main__':
             , debug=False
             , use_reloader=False
             , threaded=True)
- 

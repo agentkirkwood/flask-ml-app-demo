@@ -23,7 +23,10 @@
     <div class="row mb-4">
       <div class="col-lg-8">
         <form id="articleFiltersForm" method="get" action="/articles" class="d-flex gap-2 flex-wrap">
-          <input type="text" name="q" class="form-control" placeholder="Search headlines, body, author, publisher..." value="{{ query_text }}" style="min-width: 220px;">
+          <div class="input-group" style="min-width: 260px;">
+            <input type="text" name="q" class="form-control" placeholder="Search headlines, body, author, publisher..." value="{{ query_text }}">
+            <button type="submit" class="btn btn-primary">Search</button>
+          </div>
           <div class="border rounded p-2" style="min-width: 220px;">
             <div class="d-flex justify-content-between align-items-center mb-1">
               <a class="fw-semibold small text-decoration-none" data-bs-toggle="collapse" href="#subjectCollapse" role="button" aria-expanded="false" aria-controls="subjectCollapse">
@@ -64,13 +67,19 @@
               </div>
             </div>
           </div>
+          <select name="sort" class="form-select" style="max-width: 200px;">
+            <option value="random" {% if sort_key == 'random' %}selected{% endif %}>Random</option>
+            <option value="date_desc" {% if sort_key == 'date_desc' %}selected{% endif %}>Date: New to Old</option>
+            <option value="date_asc" {% if sort_key == 'date_asc' %}selected{% endif %}>Date: Old to New</option>
+            <option value="author" {% if sort_key == 'author' %}selected{% endif %}>Author (A-Z)</option>
+            <option value="publisher" {% if sort_key == 'publisher' %}selected{% endif %}>Publisher (A-Z)</option>
+          </select>
           <select name="per_page" class="form-select" style="max-width: 140px;">
             <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
             <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
             <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
             <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
           </select>
-          <button type="submit" class="btn btn-primary">Search</button>
           <button id="clearFiltersBtn" type="button" class="btn btn-outline-secondary" {% if not (query_text or subject_filter or publisher_filter) %}style="display: none;"{% endif %}>Clear</button>
         </form>
       </div>
@@ -85,9 +94,12 @@
          data-page="{{ page }}"
          data-total-pages="{{ total_pages }}"
          data-per-page="{{ per_page }}"
+         data-sort="{{ sort_key }}"
+         data-seed="{{ seed }}"
          data-query="{{ query_text|e }}"
          data-subjects='{{ subject_filter|tojson }}'
          data-publishers='{{ publisher_filter|tojson }}'>
+      {% set query_params_for_cards = query_params %}
       {% include 'partials/_article_cards.html' %}
     </div>
 
@@ -122,6 +134,7 @@
       var selectAllSubjectsBtn = document.getElementById('selectAllSubjects');
       var selectAllPublishersBtn = document.getElementById('selectAllPublishers');
       var perPageSelect = form ? form.querySelector('[name="per_page"]') : null;
+      var sortSelect = form ? form.querySelector('[name="sort"]') : null;
       var loadMoreBtn = document.getElementById('loadMoreBtn');
       var sentinel = document.getElementById('loadMoreSentinel');
       var resultsCount = document.getElementById('resultsCount');
@@ -154,6 +167,8 @@
           page: parseInt(container.dataset.page || '1', 10),
           totalPages: parseInt(container.dataset.totalPages || '1', 10),
           perPage: container.dataset.perPage || '25',
+          sort: container.dataset.sort || 'random',
+          seed: parseInt(container.dataset.seed || '', 10) || null,
           query: container.dataset.query || '',
           subject: parseDatasetArray(container.dataset.subjects),
           publisher: parseDatasetArray(container.dataset.publishers)
@@ -189,14 +204,17 @@
       }
 
       function buildUrl(nextPage) {
+        var current = getParams();
         var params = new URLSearchParams();
         params.set('page', String(nextPage));
-        params.set('per_page', getParams().perPage);
-        if (getParams().query) params.set('q', getParams().query);
-        getParams().subject.forEach(function (value) {
+        params.set('per_page', current.perPage);
+        params.set('sort', current.sort);
+        if (current.seed !== null) params.set('seed', String(current.seed));
+        if (current.query) params.set('q', current.query);
+        current.subject.forEach(function (value) {
           params.append('subject', value);
         });
-        getParams().publisher.forEach(function (value) {
+        current.publisher.forEach(function (value) {
           params.append('publisher', value);
         });
         params.set('partial', '1');
@@ -207,6 +225,8 @@
         var params = new URLSearchParams();
         var q = form ? form.querySelector('[name="q"]').value.trim() : '';
         var perPage = perPageSelect ? perPageSelect.value : getParams().perPage;
+        var sort = sortSelect ? sortSelect.value : getParams().sort;
+        var seed = getParams().seed;
 
         var subjectValues = [];
         var publisherValues = [];
@@ -226,6 +246,8 @@
         subjectValues.forEach(function (value) { params.append('subject', value); });
         publisherValues.forEach(function (value) { params.append('publisher', value); });
         params.set('per_page', perPage);
+        params.set('sort', sort);
+        if (seed !== null) params.set('seed', String(seed));
         params.set('page', String(page));
         return params;
       }
@@ -289,6 +311,7 @@
         container.dataset.subjects = JSON.stringify(selectedSubjects);
         container.dataset.publishers = JSON.stringify(selectedPublishers);
         container.dataset.perPage = params.get('per_page') || '25';
+        container.dataset.sort = params.get('sort') || 'random';
         setPage(1);
 
         if (loadMoreBtn) loadMoreBtn.disabled = true;
@@ -301,6 +324,15 @@
             updateTotal(payload.total);
             setTotals(payload.total_pages || 1, payload.page || 1);
             updateLoaderVisibility();
+
+            // Seed handling for random sorting - preserve the same seed when applying new filters to maintain result consistency
+            if (payload.seed !== undefined && payload.seed !== null) {
+              container.dataset.seed = String(payload.seed);
+              params.set('seed', String(payload.seed));
+            } else {
+              delete container.dataset.seed;
+              params.delete('seed');
+            }
 
             setCheckboxOptions(subjectOptions, payload.subjects || [], selectedSubjects, 'subject', 'subject');
             setCheckboxOptions(publisherOptions, payload.publishers || [], selectedPublishers, 'publisher', 'publisher');
@@ -381,6 +413,12 @@
 
         if (perPageSelect) {
           perPageSelect.addEventListener('change', function () {
+            applyFilters(true);
+          });
+        }
+
+        if (sortSelect) {
+          sortSelect.addEventListener('change', function () {
             applyFilters(true);
           });
         }
