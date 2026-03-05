@@ -101,3 +101,12 @@ ML_APP/
 - The model must be retrained (`build_model.py`) whenever you want to update it with new data
 - The pickled model file (`static/model.pkl`) must exist before running the web app
 - Make sure your training data CSV has the required columns: `body` and `section_name`
+
+## Data Sources
+
+For expanding the training dataset in the future, consider these free news datasets:
+
+- **Webhose Free News Datasets**: [https://github.com/Webhose/free-news-datasets](https://github.com/Webhose/free-news-datasets/tree/master)
+  - Collection of free news article datasets
+  - Various categories and time periods
+  - JSON format, can be converted to CSV for training
