@@ -2,6 +2,9 @@
 Module containing model fitting code for a web application that 
 implements a text classification model.
 
+Includes OversamplingEstimator class for balancing minority classes
+during training while preserving test set distributions.
+
 When run as a module, this will load a csv dataset, train a 
 classification model, and then pickle the resulting model object to disk.
 
