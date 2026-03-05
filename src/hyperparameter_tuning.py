@@ -102,7 +102,7 @@ def create_logistic_regression_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
     param_distributions = {
         'pipeline__classifier__l1_ratio': [0.0, 1.0],  # Test L2 and L1, can also add intermediate values for Elastic Net if desired
         'pipeline__classifier__C': loguniform(0.01, 200),  # Inverse regularization, log scale 0.01 to 100
-        'pipeline__classifier__tol': loguniform(1e-6, 1e-2)  # Stopping tolerance, log scale 1e-6 to 0.01
+        'pipeline__classifier__tol': loguniform(1e-5, 1e-2)  # Stopping tolerance, log scale 1e-5 to 0.01
     }
     
     return pipeline, param_distributions
