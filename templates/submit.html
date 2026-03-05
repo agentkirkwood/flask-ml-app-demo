@@ -9,8 +9,66 @@
       padding: 20px;
       display: none;
     }
-    .spinner {
+    
+    /* Loading overlay */
+    .loading-overlay {
       display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .loading-overlay.active {
+      display: flex;
+    }
+    
+    .loading-content {
+      text-align: center;
+      color: white;
+      padding: 40px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+    }
+    
+    .loading-content h2 {
+      margin-bottom: 20px;
+      font-weight: 300;
+    }
+    
+    .loading-dots {
+      font-size: 48px;
+      letter-spacing: 10px;
+      animation: dots 1.5s infinite;
+    }
+    
+    @keyframes dots {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60%, 100% { content: '...'; }
+    }
+    
+    .loading-dots::after {
+      content: '...';
+      animation: dotsAnimation 1.5s infinite;
+    }
+    
+    @keyframes dotsAnimation {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60%, 100% { content: '...'; }
+    }
+    
+    .loading-message {
+      margin-top: 15px;
+      font-size: 14px;
+      opacity: 0.8;
     }
   </style>
 {% endblock %}
@@ -32,10 +90,7 @@
           <textarea class="form-control" id="article_body" name="article_body" rows="6" placeholder="Paste your article text here..."></textarea>
         </div>
         <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
-          <span class="btn-text">Classify</span>
-          <span class="spinner">
-            <span class="glyphicon glyphicon-refresh glyphicon-spin"></span> Processing...
-          </span>
+          Classify
         </button>
         <a href="/" class="btn btn-outline-secondary">Back</a>
       </form>
@@ -62,6 +117,16 @@
       </div>
     </div>
   </div>
+  
+  <!-- Loading overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-content">
+      <h2>Processing Your Text</h2>
+      <div class="loading-dots"></div>
+      <p class="loading-message">Please wait while the server processes your request<br>
+      <small>(First-time model building may take up to 2 minutes)</small></p>
+    </div>
+  </div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -83,10 +148,9 @@
         $('#resultBox').hide();
         $('#errorBox').hide();
         
-        // Show loading state
+        // Show loading overlay
+        $('#loadingOverlay').addClass('active');
         $('#submitBtn').prop('disabled', true);
-        $('.btn-text').hide();
-        $('.spinner').show();
         
         // Make AJAX request
         $.ajax({
@@ -114,10 +178,9 @@
             showError(errorMsg);
           },
           complete: function() {
-            // Reset button state
+            // Hide loading overlay and reset button
+            $('#loadingOverlay').removeClass('active');
             $('#submitBtn').prop('disabled', false);
-            $('.btn-text').show();
-            $('.spinner').hide();
           }
         });
       });
