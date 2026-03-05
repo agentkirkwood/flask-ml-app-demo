@@ -38,7 +38,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import RandomizedSearchCV, cross_validate, StratifiedKFold
 from sklearn.metrics import precision_recall_fscore_support, make_scorer, precision_score, recall_score, f1_score
 from scipy.stats import uniform, loguniform  # type: ignore
-from src.build_model import get_data, oversample_data
+from src.build_model import get_data, OversamplingEstimator
 
 
 # Create custom scorers with zero_division=0 to suppress warnings
@@ -53,6 +53,8 @@ SCORING = {
 def create_multinomial_nb_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
     """Create a pipeline for MultinomialNB with TfidfVectorizer.
     
+    Note: Oversampling must be handled outside the pipeline since it needs access to labels.
+    
     Returns
     -------
     pipeline: sklearn Pipeline object
@@ -66,8 +68,9 @@ def create_multinomial_nb_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
     ])
     
     # Parameter distributions for RandomizedSearchCV
+    # Note: Parameters are prefixed with 'pipeline__' because they're accessed through OversamplingEstimator
     param_distributions = {
-        'classifier__alpha': loguniform(1e-3, 10)  # Search alpha on log scale from 0.001 to 10
+        'pipeline__classifier__alpha': loguniform(1e-3, 10)  # Search alpha on log scale from 0.001 to 10
     }
     
     return pipeline, param_distributions
@@ -75,6 +78,8 @@ def create_multinomial_nb_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
 
 def create_logistic_regression_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
     """Create a pipeline for LogisticRegression with TfidfVectorizer.
+    
+    Note: Oversampling must be handled outside the pipeline since it needs access to labels.
     
     Returns
     -------
@@ -93,10 +98,11 @@ def create_logistic_regression_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
     # l1_ratio=0.0 is pure L2 (ridge) - shrinks all features
     # l1_ratio=0.5 is Elastic Net (50/50) - balanced mix of both penalties
     # l1_ratio=1.0 is pure L1 (lasso) - feature selection via sparsity
+    # Parameters are prefixed with 'pipeline__' because they're accessed through OversamplingEstimator
     param_distributions = {
-        'classifier__l1_ratio': [0.0, 1.0],  # Test L2 and L1, can also add intermediate values for Elastic Net if desired
-        'classifier__C': loguniform(0.01, 200),  # Inverse regularization, log scale 0.01 to 100
-        'classifier__tol': loguniform(1e-6, 1e-2)  # Stopping tolerance, log scale 1e-5 to 0.01
+        'pipeline__classifier__l1_ratio': [0.0, 1.0],  # Test L2 and L1, can also add intermediate values for Elastic Net if desired
+        'pipeline__classifier__C': loguniform(0.01, 200),  # Inverse regularization, log scale 0.01 to 100
+        'pipeline__classifier__tol': loguniform(1e-6, 1e-2)  # Stopping tolerance, log scale 1e-6 to 0.01
     }
     
     return pipeline, param_distributions
@@ -105,10 +111,12 @@ def create_logistic_regression_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
 def perform_multinomial_nb_search(X: List[str], y: List[str], n_folds: int = 10, n_iter: int = 50, random_state: int = 42) -> Dict[str, Any]:
     """Perform hyperparameter tuning for MultinomialNB.
     
+    Uses custom CV with oversampling applied only to training folds to avoid data leakage.
+    
     Parameters
     ----------
-    X: list of text fragments
-    y: list of labels
+    X: list of text fragments (original, unbalanced data)
+    y: list of labels (original, unbalanced data)
     n_folds: int, number of cross-validation folds
     n_iter: int, number of iterations for RandomizedSearchCV
     random_state: int, random seed
@@ -127,12 +135,23 @@ def perform_multinomial_nb_search(X: List[str], y: List[str], n_folds: int = 10,
     param_distributions: Dict[str, Any]
     pipeline, param_distributions = create_multinomial_nb_pipeline()
     
+    # Create custom CV that oversamples only training folds
+    from sklearn.model_selection import StratifiedKFold
+    cv_splitter = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+    
+    # Manually perform RandomizedSearchCV with oversampling in each training fold
+    print(f"\nRunning RandomizedSearchCV with {n_iter} iterations and {n_folds}-fold CV...")
+    print("Note: Oversampling applied to training folds only (test folds remain original distribution)")
+    
+    # Wrap pipeline with oversampling estimator
+    wrapped_pipeline = OversamplingEstimator(pipeline)
+    
     # Perform RandomizedSearchCV
     random_search: RandomizedSearchCV = RandomizedSearchCV(
-        pipeline,
+        wrapped_pipeline,
         param_distributions=param_distributions,
         n_iter=n_iter,
-        cv=n_folds,
+        cv=cv_splitter,
         scoring='accuracy',
         n_jobs=-1,
         random_state=random_state,
@@ -140,22 +159,22 @@ def perform_multinomial_nb_search(X: List[str], y: List[str], n_folds: int = 10,
         verbose=2
     )
     
-    print(f"\nRunning RandomizedSearchCV with {n_iter} iterations and {n_folds}-fold CV...")
     random_search.fit(X, y)
     
     # Get detailed results
-    best_model: Pipeline = random_search.best_estimator_  # type: ignore
+    best_wrapped: OversamplingEstimator = random_search.best_estimator_  # type: ignore
+    best_model: Pipeline = best_wrapped.pipeline  # Extract the actual pipeline
     best_params: Dict[str, Any] = random_search.best_params_
     best_score: float = random_search.best_score_
     
     print(f"\nBest parameters: {best_params}")
     print(f"Best CV score: {best_score:.4f}")
     
-    # Get individual fold scores for the best model
+    # Get individual fold scores for the best model using the wrapper
     cv_results_detailed: Dict[str, Any] = cross_validate(  # type: ignore
-        best_model,
+        best_wrapped,
         X, y,
-        cv=n_folds,
+        cv=cv_splitter,
         scoring=SCORING,
         return_train_score=True,
         n_jobs=-1
@@ -275,7 +294,10 @@ def calculate_per_class_metrics(model: Pipeline, X: List[str], y: List[str], n_f
         X_test: List[str] = [X[i] for i in test_idx]
         y_test: List[str] = [y[i] for i in test_idx]
         
-        # Clone and fit model on training fold
+        # Oversample training fold only (test fold remains original distribution)
+        X_train, y_train = OversamplingEstimator.oversample_minority_classes(X_train, y_train)
+        
+        # Clone and fit model on oversampled training fold
         from sklearn.base import clone
         fold_model: Pipeline = clone(model)  # type: ignore
         fold_model.fit(X_train, y_train)
@@ -316,12 +338,12 @@ def perform_logistic_regression_search(X: List[str], y: List[str], n_folds: int 
     """Perform hyperparameter tuning for LogisticRegression.
     
     Performs RandomizedSearchCV on l1_ratio (L1 vs L2), C, and tol simultaneously.
-    Returns the overall best model.
+    Uses custom CV with oversampling applied only to training folds to avoid data leakage.
     
     Parameters
     ----------
-    X: list of text fragments
-    y: list of labels
+    X: list of text fragments (original, unbalanced data)
+    y: list of labels (original, unbalanced data)
     n_folds: int, number of cross-validation folds
     n_iter_grid: int, (deprecated, kept for backwards compatibility)
     n_iter_random: int, number of iterations for RandomizedSearchCV
@@ -341,15 +363,23 @@ def perform_logistic_regression_search(X: List[str], y: List[str], n_folds: int 
     param_distributions: Dict[str, Any]
     pipeline, param_distributions = create_logistic_regression_pipeline()
     
+    # Create custom CV that oversamples only training folds
+    from sklearn.model_selection import StratifiedKFold
+    cv_splitter = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+    
     # Perform RandomizedSearchCV on all hyperparameters together
     print(f"\nRunning RandomizedSearchCV with {n_iter_random} iterations and {n_folds}-fold CV...")
     print("Searching over: l1_ratio (L1 vs L2), C (regularization), tol (tolerance)")
+    print("Note: Oversampling applied to training folds only (test folds remain original distribution)")
+    
+    # Wrap pipeline with oversampling estimator
+    wrapped_pipeline = OversamplingEstimator(pipeline)
     
     random_search: RandomizedSearchCV = RandomizedSearchCV(
-        pipeline,
+        wrapped_pipeline,
         param_distributions=param_distributions,
         n_iter=n_iter_random,
-        cv=n_folds,
+        cv=cv_splitter,
         scoring='accuracy',
         n_jobs=-1,
         random_state=random_state,
@@ -360,12 +390,13 @@ def perform_logistic_regression_search(X: List[str], y: List[str], n_folds: int 
     random_search.fit(X, y)
     
     # Get detailed results
-    best_model: Pipeline = random_search.best_estimator_  # type: ignore
+    best_wrapped: OversamplingEstimator = random_search.best_estimator_  # type: ignore
+    best_model: Pipeline = best_wrapped.pipeline  # Extract the actual pipeline
     best_params: Dict[str, Any] = random_search.best_params_
     best_score: float = random_search.best_score_
     
     # Display best parameters with readable penalty type
-    best_l1_ratio: float = best_params.get('classifier__l1_ratio', 0.0)
+    best_l1_ratio: float = best_params.get('pipeline__classifier__l1_ratio', 0.0)
     if best_l1_ratio == 0.0:
         penalty_type: str = "L2 (Ridge)"
     elif best_l1_ratio == 1.0:
@@ -377,11 +408,11 @@ def perform_logistic_regression_search(X: List[str], y: List[str], n_folds: int 
     print(f"Best penalty type: {penalty_type}")
     print(f"Best CV score: {best_score:.4f}")
     
-    # Get individual fold scores for the best model
+    # Get individual fold scores for the best model using the wrapper
     cv_results_detailed: Dict[str, Any] = cross_validate(  # type: ignore
-        best_model,
+        best_wrapped,
         X, y,
-        cv=n_folds,
+        cv=cv_splitter,
         scoring=SCORING,
         return_train_score=True,
         n_jobs=-1
@@ -574,14 +605,8 @@ if __name__ == '__main__':
     X, y = get_data()
     print(f"Data loaded successfully. Total articles: {len(X)}")
     print(f"Unique classes: {len(set(y))}")
-    print(f"Class distribution: {dict(pd.Series(y).value_counts())}")
-    
-    # Balance classes with oversampling
-    print("\nBalancing classes with oversampling...")
-    X, y = oversample_data(X, y)
-    print(f"Balanced dataset size: {len(X)}")
-    print(f"Class distribution after oversampling: {dict(pd.Series(y).value_counts())}")
-    
+    print(f"Class distribution (original, unbalanced): {dict(pd.Series(y).value_counts())}")
+    print("\n[Oversampling will be applied to training folds only during CV]")
     print("="*80)
     
     # Perform hyperparameter tuning for both models

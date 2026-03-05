@@ -15,49 +15,117 @@ import pickle
 import pandas as pd
 import os
 import random
+from typing import List, Tuple, Dict, Any
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from src.create_db import Article, Base
 
 
-def oversample_data(X: list, y: list) -> tuple:
-    """Oversample minority classes to balance the training data.
+class OversamplingEstimator(BaseEstimator):
+    """Estimator wrapper that oversamples training data before fitting the pipeline.
     
-    Parameters
-    ----------
-    X: A list of text fragments.
-    y: A list of labels.
+    This ensures oversampling only affects training data in CV folds, not test data.
+    During fit(), minority classes are oversampled to match the majority class count.
+    During predict()/score(), data is passed through unchanged.
     
-    Returns
-    -------
-    X_balanced: Oversampled text fragments.
-    y_balanced: Oversampled labels.
+    This class is designed to wrap sklearn Pipelines for hyperparameter tuning.
     """
-    # Find the maximum class frequency
-    max_count = max([sum(1 for label in y if label == cls) for cls in set(y)])
     
-    # Oversample minority classes
-    X_balanced = []
-    y_balanced = []
-    for cls in set(y):
-        X_cls = [X[i] for i in range(len(X)) if y[i] == cls]
-        y_cls = [cls] * len(X_cls)
+    def __init__(self, pipeline: Pipeline) -> None:
+        self.pipeline = pipeline
+    
+    @staticmethod
+    def oversample_minority_classes(X: List[str], y: List[str]) -> Tuple[List[str], List[str]]:
+        """Oversample minority classes to balance the training data.
         
-        # Duplicate samples to reach max_count
-        repetitions = max_count // len(X_cls)
-        remainder = max_count % len(X_cls)
+        This static method duplicates samples from minority classes to match the count
+        of the majority class, then shuffles the result.
         
-        X_balanced.extend(X_cls * repetitions + X_cls[:remainder])
-        y_balanced.extend(y_cls * repetitions + y_cls[:remainder])
+        Parameters
+        ----------
+        X: list of text fragments
+        y: list of labels
+        
+        Returns
+        -------
+        X_balanced: oversampled text fragments
+        y_balanced: oversampled labels
+        """
+        # Find the maximum class frequency
+        max_count = max([sum(1 for label in y if label == cls) for cls in set(y)])
+        
+        # Oversample minority classes
+        X_balanced = []
+        y_balanced = []
+        for cls in set(y):
+            X_cls = [X[i] for i in range(len(X)) if y[i] == cls]
+            y_cls = [cls] * len(X_cls)
+            
+            # Duplicate samples to reach max_count
+            repetitions = max_count // len(X_cls)
+            remainder = max_count % len(X_cls)
+            
+            X_balanced.extend(X_cls * repetitions + X_cls[:remainder])
+            y_balanced.extend(y_cls * repetitions + y_cls[:remainder])
+        
+        # Shuffle to mix classes
+        combined = list(zip(X_balanced, y_balanced))
+        random.shuffle(combined)
+        X_balanced, y_balanced = zip(*combined)
+        
+        return list(X_balanced), list(y_balanced)
     
-    # Shuffle
-    combined = list(zip(X_balanced, y_balanced))
-    random.shuffle(combined)
-    X_balanced, y_balanced = zip(*combined)
+    def fit(self, X: List[str], y: List[str]) -> 'OversamplingEstimator':
+        """Oversample training data and fit the pipeline."""
+        X_train_balanced, y_train_balanced = self.oversample_minority_classes(X, y)
+        self.pipeline.fit(X_train_balanced, y_train_balanced)
+        return self
     
-    return list(X_balanced), list(y_balanced)
+    def predict(self, X: List[str]) -> np.ndarray:
+        """Make predictions (no oversampling during prediction)."""
+        return self.pipeline.predict(X)
+    
+    def score(self, X: List[str], y: List[str]) -> float:
+        """Score the model (no oversampling during scoring)."""
+        return self.pipeline.score(X, y)
+    
+    def get_params(self, deep: bool = True) -> Dict[str, Any]:
+        """Get parameters for this estimator.
+        
+        Returns the pipeline and optionally its nested parameters with 'pipeline__' prefix.
+        """
+        params = {'pipeline': self.pipeline}
+        if deep:
+            # Get nested parameters from the pipeline with 'pipeline__' prefix
+            pipeline_params = self.pipeline.get_params(deep=True)
+            for key, value in pipeline_params.items():
+                params[f'pipeline__{key}'] = value
+        return params
+    
+    def set_params(self, **params: Any) -> 'OversamplingEstimator':
+        """Set parameters for this estimator.
+        
+        Handles both 'pipeline' parameter and nested 'pipeline__*' parameters.
+        """
+        pipeline_params = {}
+        for key, value in params.items():
+            if key == 'pipeline':
+                self.pipeline = value
+            elif key.startswith('pipeline__'):
+                # Remove 'pipeline__' prefix and pass to pipeline
+                pipeline_params[key[10:]] = value
+            else:
+                raise ValueError(f"Invalid parameter {key} for estimator OversamplingEstimator")
+        
+        if pipeline_params:
+            self.pipeline.set_params(**pipeline_params)
+        
+        return self
 
 
 class TextClassifier(object):
@@ -92,7 +160,7 @@ class TextClassifier(object):
         self: The fit model object.
         """
         # Oversample minority classes for balanced training
-        X, y = oversample_data(X, y)
+        X, y = OversamplingEstimator.oversample_minority_classes(X, y)
         
         X = self._vectorizer.fit_transform(X)
         self._classifier.fit(X, y)
