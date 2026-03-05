@@ -156,7 +156,7 @@ def perform_multinomial_nb_search(X: List[str], y: List[str], n_folds: int = 10,
         n_jobs=-1,
         random_state=random_state,
         return_train_score=True,
-        verbose=2
+        verbose=3
     )
     
     random_search.fit(X, y)
@@ -384,7 +384,7 @@ def perform_logistic_regression_search(X: List[str], y: List[str], n_folds: int 
         n_jobs=-1,
         random_state=random_state,
         return_train_score=True,
-        verbose=2
+        verbose=3
     )
     
     random_search.fit(X, y)
