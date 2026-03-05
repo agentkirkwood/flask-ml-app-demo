@@ -18,10 +18,12 @@ import pickle
 import pandas as pd
 import os
 import random
-from typing import List, Tuple, Dict, Any
+import json
+from typing import List, Tuple, Dict, Any, Optional
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator
 from sqlalchemy import create_engine
@@ -134,21 +136,93 @@ class OversamplingEstimator(BaseEstimator):
 class TextClassifier(object):
     """A text classifier model:
         - Vectorize the raw text into features.
-        - Fit a naive bayes model to the resulting features.
+        - Fit the best classifier model (determined from hyperparameter tuning).
 
-    The work done by this class could also be done with a sklean.pipeline
-    object.  Since the author cannot guarantee that Pipelines have been
-    introduced, he opted to write his own class implementing the model.
+    This class loads the winning model type and hyperparameters from
+    model_comparison.json (if available) and uses those for training.
+    Falls back to default LogisticRegression if the file doesn't exist.
 
-    This class is an example of coding to an interface, it implements the
-    standard sklearn fit, predict, score interface.
+    This class implements the standard sklearn fit, predict, score interface.
     """
 
-    def __init__(self):
+    def __init__(self, model_comparison_path: Optional[str] = None):
+        """Initialize classifier with winning hyperparameters.
+        
+        Parameters
+        ----------
+        model_comparison_path: Path to model_comparison.json. If None, uses default location.
+        """
         self._vectorizer = TfidfVectorizer(stop_words='english'
                                            , token_pattern=r'[a-z]+' #letters only, no numbers or punctuation 
                                            , lowercase=True)
-        self._classifier = MultinomialNB()
+        
+        # Try to load winning model and hyperparameters
+        if model_comparison_path is None:
+            model_comparison_path = os.path.join(
+                os.path.dirname(__file__), 'model_scores', 'model_comparison.json'
+            )
+        
+        winning_model_type, best_params = self._load_winning_model(model_comparison_path)
+        
+        # Initialize classifier with winning hyperparameters
+        if winning_model_type == 'LogisticRegression':
+            self._classifier = LogisticRegression(
+                C=best_params.get('C', 1.0),
+                l1_ratio=best_params.get('l1_ratio', 0.0),
+                tol=best_params.get('tol', 1e-4),
+                max_iter=5000,
+                solver='saga'
+            )
+            print(f"Using LogisticRegression with C={best_params.get('C', 1.0):.2f}, "
+                  f"l1_ratio={best_params.get('l1_ratio', 0.0)}, "
+                  f"tol={best_params.get('tol', 1e-4):.2e}")
+        elif winning_model_type == 'MultinomialNB':
+            self._classifier = MultinomialNB(
+                alpha=best_params.get('alpha', 1.0)
+            )
+            print(f"Using MultinomialNB with alpha={best_params.get('alpha', 1.0):.4f}")
+        else:
+            # Fallback to default LogisticRegression with reasonable hyperparameters
+            self._classifier = LogisticRegression(
+                C=170,
+                l1_ratio=0.0,
+                tol=1e-4,
+                max_iter=5000,
+                solver='saga'
+            )
+            print("Using default LogisticRegression (no model_comparison.json found)")
+    
+    def _load_winning_model(self, path: str) -> Tuple[str, Dict[str, Any]]:
+        """Load winning model type and hyperparameters from model_comparison.json.
+        
+        Parameters
+        ----------
+        path: Path to model_comparison.json
+        
+        Returns
+        -------
+        model_type: 'MultinomialNB' or 'LogisticRegression'
+        best_params: Dict of hyperparameters (with pipeline__ prefix stripped)
+        """
+        try:
+            with open(path, 'r') as f:
+                comparison_data = json.load(f)
+            
+            winner: str = comparison_data.get('winner', 'LogisticRegression')
+            raw_params: Dict[str, Any] = comparison_data.get(winner, {}).get('best_hyperparameters', {})
+            
+            # Strip 'pipeline__classifier__' prefix from parameter names
+            best_params: Dict[str, Any] = {}
+            for key, value in raw_params.items():
+                # Remove the nested prefix to get just the param name
+                clean_key = key.replace('pipeline__classifier__', '')
+                best_params[clean_key] = value
+            
+            return winner, best_params
+            
+        except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+            print(f"Could not load model_comparison.json: {e}")
+            return 'LogisticRegression', {}
 
     def fit(self, X, y):
         """Fit a text classifier model.
