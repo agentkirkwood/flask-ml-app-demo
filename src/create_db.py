@@ -1,5 +1,6 @@
 import os
 import ast
+import re
 import pandas as pd
 from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer, ForeignKey, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -35,6 +36,7 @@ class Article(Base):
     __tablename__ = 'articles'
     
     id = Column(String, primary_key=True)
+    url_id = Column(String, unique=True, nullable=False, index=True)  # URL-friendly unique identifier
     headline = Column(JSON)
     pub_date = Column(DateTime)
     auth_id = Column(Integer, ForeignKey('authors.id'))
@@ -95,6 +97,36 @@ def first_person_name(person_list):
         lastname = proper_case(person.get('lastname', '').strip())
         return f"{firstname} {lastname}".strip()
     return ''
+
+def create_url_slug(title):
+    """Convert article title to URL-friendly slug.
+    
+    Args:
+        title: Article title string
+    
+    Returns:
+        URL-friendly slug (lowercase, hyphens instead of spaces, alphanumeric only)
+    """
+    if not title:
+        return 'untitled'
+    
+    # Convert to lowercase
+    slug = title.lower()
+    
+    # Replace apostrophes and quotes with nothing
+    slug = re.sub(r"[''`\"]", '', slug)
+    
+    # Replace any non-alphanumeric characters (except hyphens) with hyphens
+    slug = re.sub(r'[^a-z0-9-]+', '-', slug)
+    
+    # Remove leading/trailing hyphens and collapse multiple hyphens
+    slug = re.sub(r'-+', '-', slug).strip('-')
+    
+    # Limit length to 100 characters
+    if len(slug) > 100:
+        slug = slug[:100].rsplit('-', 1)[0]  # Cut at last hyphen within limit
+    
+    return slug or 'untitled'
 
 def create_subject(section, subsection):
     """Transform section and subsection into a subject field.
@@ -204,7 +236,22 @@ def load_articles_to_db():
                     session.flush()
                 authors_map[author] = auth.id
         
-        # Insert articles with foreign keys
+        # First pass: identify duplicate titles
+        title_slugs = []
+        for idx, row in df.iterrows():
+            headline_data = row['headline']
+            title = headline_data.get('main', '') if isinstance(headline_data, dict) else ''
+            base_url_id = create_url_slug(title)
+            title_slugs.append(base_url_id)
+        
+        # Count occurrences of each slug
+        from collections import Counter
+        slug_counts = Counter(title_slugs)
+        
+        # Track url_id usage for edge cases
+        url_id_counts = {}
+        
+        # Second pass: insert articles with appropriate url_ids
         for idx, row in df.iterrows():
             pub_id = publishers_map.get(row['source'])
             auth_id = authors_map.get(row['author'])
@@ -212,8 +259,33 @@ def load_articles_to_db():
             # Create subject from section and subsection
             subject = create_subject(row['section'], row['subsection_name'])
             
+            # Get article title and create base url_id
+            headline_data = row['headline']
+            title = headline_data.get('main', '') if isinstance(headline_data, dict) else ''
+            base_url_id = create_url_slug(title)
+            
+            # Only append date if this title appears multiple times
+            if slug_counts[base_url_id] > 1:
+                pub_date = row['pub_date']
+                if pd.notna(pub_date):
+                    date_str = pub_date.strftime('%Y-%b-%d').lower()  # e.g., 2024-jan-15
+                    url_id = f"{base_url_id}-{date_str}"
+                else:
+                    url_id = f"{base_url_id}-unknown-date"
+                
+                # Handle rare edge case: same title + same date (append counter)
+                if url_id in url_id_counts:
+                    url_id_counts[url_id] += 1
+                    url_id = f"{url_id}-{url_id_counts[url_id]}"
+                else:
+                    url_id_counts[url_id] = 0
+            else:
+                # Unique title - use base slug only
+                url_id = base_url_id
+            
             article = Article(
                 id=str(row['_id']),
+                url_id=url_id,
                 pub_date=row['pub_date'],
                 pub_id=pub_id,
                 section=row['section'],

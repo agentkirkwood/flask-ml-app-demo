@@ -207,6 +207,7 @@ def articles() -> Response:
 
         base_query = session.query(
             Article.id,
+            Article.url_id,
             Article.headline,
             Article.pub_date,
             Article.subject,
@@ -347,8 +348,8 @@ def articles() -> Response:
     finally:
         session.close()
 
-@app.route('/articles/<article_id>', methods=['GET'])
-def article_detail(article_id) -> Response:
+@app.route('/articles/<url_id>', methods=['GET'])
+def article_detail(url_id) -> Response:
     """Display detailed information for a specific article."""
     seed = request.args.get('seed', type=int)
     sort_key = request.args.get('sort', 'random', type=str).strip()
@@ -362,7 +363,7 @@ def article_detail(article_id) -> Response:
             Publisher.name.label('publisher_name')
         ).outerjoin(Author, Article.auth_id == Author.id)\
          .outerjoin(Publisher, Article.pub_id == Publisher.id)\
-         .filter(Article.id == article_id)\
+         .filter(Article.url_id == url_id)\
          .first()
         
         if not article_data:
