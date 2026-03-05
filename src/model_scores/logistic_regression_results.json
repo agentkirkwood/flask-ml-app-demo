@@ -3,7 +3,7 @@
   "best_hyperparameters": {
     "pipeline__classifier__C": 169.3969289160421,
     "pipeline__classifier__l1_ratio": 0.0,
-    "pipeline__classifier__tol": 1.3783237455007187e-05
+    "pipeline__classifier__tol": 1.0e-04
   },
   "cv_folds": 10,
   "tuning_time_seconds": 21297.03689646721,
