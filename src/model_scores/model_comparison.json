@@ -1,0 +1,47 @@
+{
+  "last_updated": "2026-03-05 05:25:20",
+  "models_compared": [
+    "MultinomialNB",
+    "LogisticRegression"
+  ],
+  "cv_folds": 10,
+  "MultinomialNB": {
+    "best_hyperparameters": {
+      "pipeline__classifier__alpha": 0.26926469100861794
+    },
+    "average_cv_performance": {
+      "test_accuracy_mean": 0.8884436090225563,
+      "test_accuracy_std": 0.005896199181818604,
+      "test_precision_macro_mean": 0.7708009964692133,
+      "test_precision_macro_std": 0.049982338741956574,
+      "test_recall_macro_mean": 0.7741661590198885,
+      "test_recall_macro_std": 0.04375037862104887,
+      "test_f1_macro_mean": 0.7613384917617012,
+      "test_f1_macro_std": 0.043332240014766044,
+      "train_accuracy_mean": 0.9665333672503678,
+      "train_accuracy_std": 0.0007201623435071465
+    },
+    "tuning_time_seconds": 897.5997812747955
+  },
+  "LogisticRegression": {
+    "best_hyperparameters": {
+      "pipeline__classifier__C": 169.3969289160421,
+      "pipeline__classifier__l1_ratio": 0.0,
+      "pipeline__classifier__tol": 1.3783237455007187e-05
+    },
+    "average_cv_performance": {
+      "test_accuracy_mean": 0.9094922600619195,
+      "test_accuracy_std": 0.007595988954920867,
+      "test_precision_macro_mean": 0.8003040901298133,
+      "test_precision_macro_std": 0.048231015284590895,
+      "test_recall_macro_mean": 0.753615031259898,
+      "test_recall_macro_std": 0.029345172219282328,
+      "test_f1_macro_mean": 0.7679785679852793,
+      "test_f1_macro_std": 0.028801085268225085,
+      "train_accuracy_mean": 0.9996024212386283,
+      "train_accuracy_std": 0.00010717685150508846
+    },
+    "tuning_time_seconds": 21297.03689646721
+  },
+  "winner": "LogisticRegression"
+}
