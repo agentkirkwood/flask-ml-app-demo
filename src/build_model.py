@@ -22,6 +22,44 @@ from sqlalchemy.orm import sessionmaker
 from src.create_db import Article, Base
 
 
+def oversample_data(X: list, y: list) -> tuple:
+    """Oversample minority classes to balance the training data.
+    
+    Parameters
+    ----------
+    X: A list of text fragments.
+    y: A list of labels.
+    
+    Returns
+    -------
+    X_balanced: Oversampled text fragments.
+    y_balanced: Oversampled labels.
+    """
+    # Find the maximum class frequency
+    max_count = max([sum(1 for label in y if label == cls) for cls in set(y)])
+    
+    # Oversample minority classes
+    X_balanced = []
+    y_balanced = []
+    for cls in set(y):
+        X_cls = [X[i] for i in range(len(X)) if y[i] == cls]
+        y_cls = [cls] * len(X_cls)
+        
+        # Duplicate samples to reach max_count
+        repetitions = max_count // len(X_cls)
+        remainder = max_count % len(X_cls)
+        
+        X_balanced.extend(X_cls * repetitions + X_cls[:remainder])
+        y_balanced.extend(y_cls * repetitions + y_cls[:remainder])
+    
+    # Shuffle
+    combined = list(zip(X_balanced, y_balanced))
+    random.shuffle(combined)
+    X_balanced, y_balanced = zip(*combined)
+    
+    return list(X_balanced), list(y_balanced)
+
+
 class TextClassifier(object):
     """A text classifier model:
         - Vectorize the raw text into features.
@@ -41,43 +79,6 @@ class TextClassifier(object):
                                            , lowercase=True)
         self._classifier = MultinomialNB()
 
-    def _oversample(self, X, y):
-        """Oversample minority classes to balance the training data.
-        
-        Parameters
-        ----------
-        X: A list of text fragments.
-        y: A list of labels.
-        
-        Returns
-        -------
-        X_balanced: Oversampled text fragments.
-        y_balanced: Oversampled labels.
-        """
-        # Find the maximum class frequency
-        max_count = max([sum(1 for label in y if label == cls) for cls in set(y)])
-        
-        # Oversample minority classes
-        X_balanced = []
-        y_balanced = []
-        for cls in set(y):
-            X_cls = [X[i] for i in range(len(X)) if y[i] == cls]
-            y_cls = [cls] * len(X_cls)
-            
-            # Duplicate samples to reach max_count
-            repetitions = max_count // len(X_cls)
-            remainder = max_count % len(X_cls)
-            
-            X_balanced.extend(X_cls * repetitions + X_cls[:remainder])
-            y_balanced.extend(y_cls * repetitions + y_cls[:remainder])
-        
-        # Shuffle
-        combined = list(zip(X_balanced, y_balanced))
-        random.shuffle(combined)
-        X_balanced, y_balanced = zip(*combined)
-        
-        return list(X_balanced), list(y_balanced)
-
     def fit(self, X, y):
         """Fit a text classifier model.
 
@@ -91,7 +92,7 @@ class TextClassifier(object):
         self: The fit model object.
         """
         # Oversample minority classes for balanced training
-        X, y = self._oversample(X, y)
+        X, y = oversample_data(X, y)
         
         X = self._vectorizer.fit_transform(X)
         self._classifier.fit(X, y)
