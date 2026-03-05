@@ -1,0 +1,47 @@
+{
+  "timestamp": "20260304_190354",
+  "models_compared": [
+    "MultinomialNB",
+    "LogisticRegression"
+  ],
+  "cv_folds": 10,
+  "MultinomialNB": {
+    "best_hyperparameters": {
+      "classifier__alpha": 0.006290644294586149
+    },
+    "average_cv_performance": {
+      "test_accuracy_mean": 0.8814975674480319,
+      "test_accuracy_std": 0.01857688590451412,
+      "test_precision_macro_mean": 0.7005224979822176,
+      "test_precision_macro_std": 0.06306876998364984,
+      "test_recall_macro_mean": 0.672730526805754,
+      "test_recall_macro_std": 0.03804084552042558,
+      "test_f1_macro_mean": 0.6716552702770164,
+      "test_f1_macro_std": 0.05115596623111293,
+      "train_accuracy_mean": 0.9868799555796258,
+      "train_accuracy_std": 0.00041107798281395574
+    },
+    "tuning_time_seconds": 434.6425459384918
+  },
+  "LogisticRegression": {
+    "best_hyperparameters": {
+      "classifier__C": 85.68869785189007,
+      "classifier__l1_ratio": 0.0,
+      "classifier__tol": 1.3783237455007187e-05
+    },
+    "average_cv_performance": {
+      "test_accuracy_mean": 0.8996019460415745,
+      "test_accuracy_std": 0.014633793773580346,
+      "test_precision_macro_mean": 0.7601125386573812,
+      "test_precision_macro_std": 0.05234017573903175,
+      "test_recall_macro_mean": 0.6979583065993217,
+      "test_recall_macro_std": 0.03908810743534753,
+      "test_f1_macro_mean": 0.712356629653765,
+      "test_f1_macro_std": 0.046932275556357754,
+      "train_accuracy_mean": 0.9996024212386283,
+      "train_accuracy_std": 0.00010717685150508846
+    },
+    "tuning_time_seconds": 4902.604066848755
+  },
+  "winner": "LogisticRegression"
+}
