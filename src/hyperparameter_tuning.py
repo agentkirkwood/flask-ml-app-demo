@@ -42,7 +42,7 @@ from src.build_model import get_data, OversamplingEstimator
 
 
 # Create custom scorers with zero_division=0 to suppress warnings
-SCORING = {
+SCORING: Dict[str, Any] = {
     'accuracy': 'accuracy',
     'precision_macro': make_scorer(precision_score, average='macro', zero_division=0),
     'recall_macro': make_scorer(recall_score, average='macro', zero_division=0),
@@ -69,7 +69,7 @@ def create_multinomial_nb_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
     
     # Parameter distributions for RandomizedSearchCV
     # Note: Parameters are prefixed with 'pipeline__' because they're accessed through OversamplingEstimator
-    param_distributions = {
+    param_distributions: Dict[str, Any] = {
         'pipeline__classifier__alpha': loguniform(1e-3, 10)  # Search alpha on log scale from 0.001 to 10
     }
     
@@ -90,7 +90,7 @@ def create_logistic_regression_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
         ('vectorizer', TfidfVectorizer(stop_words='english',
                                        token_pattern=r'[a-z]+',
                                        lowercase=True)),
-        ('classifier', LogisticRegression(max_iter=1000, solver='saga'))
+        ('classifier', LogisticRegression(max_iter=5000, solver='saga'))
     ])
     
     # Random search for all hyperparameters together
@@ -99,10 +99,10 @@ def create_logistic_regression_pipeline() -> Tuple[Pipeline, Dict[str, Any]]:
     # l1_ratio=0.5 is Elastic Net (50/50) - balanced mix of both penalties
     # l1_ratio=1.0 is pure L1 (lasso) - feature selection via sparsity
     # Parameters are prefixed with 'pipeline__' because they're accessed through OversamplingEstimator
-    param_distributions = {
+    param_distributions: Dict[str, Any] = {
         'pipeline__classifier__l1_ratio': [0.0, 1.0],  # Test L2 and L1, can also add intermediate values for Elastic Net if desired
-        'pipeline__classifier__C': loguniform(0.01, 200),  # Inverse regularization, log scale 0.01 to 100
-        'pipeline__classifier__tol': loguniform(1e-5, 1e-2)  # Stopping tolerance, log scale 1e-5 to 0.01
+        'pipeline__classifier__C': loguniform(0.01, 200),  # Inverse regularization, log scale 0.01 to 200
+        'pipeline__classifier__tol': loguniform(1e-4, 1e-2)  # Stopping tolerance, increased min from 1e-5 to 1e-4 for faster convergence
     }
     
     return pipeline, param_distributions
