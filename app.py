@@ -69,8 +69,22 @@ def get_model() -> TextClassifier:
             print(f"Model saved to {model_path}")
         else:
             # Load existing model
+            # Explicitly ensure src.build_model is in sys.modules before unpickling
+            import sys
+            if 'src.build_model' not in sys.modules:
+                from src import build_model
+                sys.modules['src.build_model'] = build_model
+            
+            # Use custom unpickler to redirect __main__ to src.build_model
+            class RobustUnpickler(pickle.Unpickler):
+                def find_class(self, module, name):
+                    # If pickle references __main__, redirect to src.build_model
+                    if module == '__main__':
+                        module = 'src.build_model'
+                    return super().find_class(module, name)
+            
             with open(model_path, 'rb') as f:
-                model = pickle.load(f)
+                model = RobustUnpickler(f).load()
             print("Model loaded from disk")
     
     return model
