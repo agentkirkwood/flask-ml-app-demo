@@ -12,19 +12,15 @@ generate predictions for all articles in the database.
 USAGE:
 
 Train model and generate predictions:
-    python src/build_model.py --out static/model.pkl
-    or: python -m src.build_model --out static/model.pkl
+    python -m src.build_model --out static/model.pkl
 
 Generate predictions only (model must already exist):
-    python src/build_model.py --predictions-only --out static/model.pkl
-    or: python -m src.build_model --predictions-only --out static/model.pkl
+    python -m src.build_model --predictions-only --out static/model.pkl
 
 """
 import argparse
 import pickle
-import pandas as pd
 import os
-import sys
 import random
 import json
 from typing import List, Tuple, Dict, Any, Optional
@@ -37,11 +33,7 @@ from sklearn.base import BaseEstimator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Add parent directory to path to allow imports when run as script
-if __name__ == '__main__':
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from src.create_db import Article, Base
+from src.create_db import Article
 
 
 class OversamplingEstimator(BaseEstimator):
