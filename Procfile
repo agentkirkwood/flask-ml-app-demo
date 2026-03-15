@@ -1,2 +1,2 @@
-release: python -u src/create_db.py
+release: python -u src/create_db.py && python -u src/build_model.py --predictions-only --out static/model.pkl
 web: gunicorn app:app

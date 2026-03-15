@@ -5,18 +5,26 @@ implements a text classification model.
 Includes OversamplingEstimator class for balancing minority classes
 during training while preserving test set distributions.
 
-When run as a module, this will load a csv dataset, train a 
-classification model, and then pickle the resulting model object to disk.
+When run as a module, this will load data from the database, train a 
+classification model, pickle the resulting model object to disk, and
+generate predictions for all articles in the database.
 
-USE:
+USAGE:
 
-python build_model.py --data path_to_input_data --out path_to_save_pickled_model
+Train model and generate predictions:
+    python src/build_model.py --out static/model.pkl
+    or: python -m src.build_model --out static/model.pkl
+
+Generate predictions only (model must already exist):
+    python src/build_model.py --predictions-only --out static/model.pkl
+    or: python -m src.build_model --predictions-only --out static/model.pkl
 
 """
 import argparse
 import pickle
 import pandas as pd
 import os
+import sys
 import random
 import json
 from typing import List, Tuple, Dict, Any, Optional
@@ -28,6 +36,11 @@ from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+# Add parent directory to path to allow imports when run as script
+if __name__ == '__main__':
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from src.create_db import Article, Base
 
 
@@ -325,34 +338,118 @@ def get_data(filename=None):
     return bodies, subjects
 
 
+def generate_predictions(model: TextClassifier) -> None:
+    """Generate predictions for all articles that don't have them yet.
+    
+    This function queries the database for articles without predictions and
+    generates them in batches using the provided model.
+    
+    Parameters
+    ----------
+    model: The trained TextClassifier model to use for predictions
+    """
+    print("\n=== Generating Article Predictions ===")
+    
+    DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///data/articles.db')
+    # Fix Heroku postgres:// URL to postgresql+psycopg:// for psycopg3
+    if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql+psycopg://', 1)
+    elif DATABASE_URL and DATABASE_URL.startswith('postgresql://') and 'sqlite' not in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
+    
+    engine = create_engine(DATABASE_URL)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    
+    try:
+        articles_to_predict = session.query(Article).filter(
+            (Article.pred_subject.is_(None)) | (Article.pred_subject == '')
+        ).all()
+        
+        if articles_to_predict:
+            total_articles = len(articles_to_predict)
+            print(f"Found {total_articles} articles without predictions. Generating...")
+            
+            # Predict in batches for efficiency
+            batch_size = 100
+            for i in range(0, total_articles, batch_size):
+                batch = articles_to_predict[i:i + batch_size]
+                bodies = [article.body for article in batch]
+                predictions = model.predict(bodies)
+                
+                for article, pred in zip(batch, predictions):
+                    article.pred_subject = pred
+                
+                session.commit()
+                progress = min(i + batch_size, total_articles)
+                print(f"  Predicted {progress}/{total_articles} articles")
+            
+            print(f"Successfully predicted {total_articles} articles")
+        else:
+            print("All articles already have predictions.")
+    
+    except Exception as e:
+        session.rollback()
+        print(f"Error generating predictions: {e}")
+        raise
+    finally:
+        session.close()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Fit a Text Classifier model and save the results.')
     parser.add_argument('--data', help='(Deprecated) Path to CSV training data.')
     parser.add_argument('--out', help='A file to save the pickled model object to.')
+    parser.add_argument('--predictions-only', action='store_true',
+                        help='Only generate predictions for articles (assumes model already exists)')
     args = parser.parse_args()
 
-    if args.data:
-        print("[DEPRECATED] --data provided: loading training data from CSV.")
-        X, y = get_data(args.data)
+    if args.predictions_only:
+        # Load existing model and generate predictions only
+        model_path = args.out if args.out else 'static/model.pkl'
+        
+        if not os.path.exists(model_path):
+            print(f"ERROR: Model not found at {model_path}")
+            print("Please train a model first by running without --predictions-only")
+            exit(1)
+        
+        print(f"Loading model from {model_path}...")
+        with open(model_path, 'rb') as f:
+            tc = pickle.load(f)
+        print("Model loaded successfully")
+        
+        generate_predictions(tc)
+        print("\nPredictions complete!")
+    
     else:
-        print("Loading data from database...")
-        X, y = get_data()
-    print(f"Data loaded successfully. Total articles: {len(X)}")
-    print(f"Unique sections: {len(set(y))}")
-    
-    print("Training text classifier model...")
-    tc = TextClassifier()
-    tc.fit(X, y)
-    print("Model training complete.")
-    
-    # Create directory if it doesn't exist
-    output_dir = os.path.dirname(args.out)
-    if output_dir and not os.path.exists(output_dir):
-        print(f"Creating output directory: {output_dir}")
-        os.makedirs(output_dir)
-    
-    print(f"Saving model to {args.out}...")
-    with open(args.out, 'wb') as f:  # Use 'wb' for binary write mode
-        pickle.dump(tc, f)
-    print("Model saved successfully!")
+        # Train model and generate predictions
+        if args.data:
+            print("[DEPRECATED] --data provided: loading training data from CSV.")
+            X, y = get_data(args.data)
+        else:
+            print("Loading data from database...")
+            X, y = get_data()
+        print(f"Data loaded successfully. Total articles: {len(X)}")
+        print(f"Unique sections: {len(set(y))}")
+        
+        print("Training text classifier model...")
+        tc = TextClassifier()
+        tc.fit(X, y)
+        print("Model training complete.")
+        
+        # Create directory if it doesn't exist
+        if args.out:
+            output_dir = os.path.dirname(args.out)
+            if output_dir and not os.path.exists(output_dir):
+                print(f"Creating output directory: {output_dir}")
+                os.makedirs(output_dir)
+            
+            print(f"Saving model to {args.out}...")
+            with open(args.out, 'wb') as f:
+                pickle.dump(tc, f)
+            print("Model saved successfully!")
+        
+        # Generate predictions for all articles
+        generate_predictions(tc)
+        print("\nModel training and predictions complete!")
