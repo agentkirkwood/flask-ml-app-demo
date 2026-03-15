@@ -129,6 +129,9 @@ def predict() -> Response:
         })
     
     except Exception as e:
+        import traceback
+        print(f"ERROR in /predict endpoint:")
+        print(traceback.format_exc())
         return jsonify({
             'success': False,
             'error': str(e)
